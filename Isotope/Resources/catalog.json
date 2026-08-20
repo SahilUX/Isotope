@@ -1,0 +1,2151 @@
+[
+  {
+    "id": "ubuntu-desktop",
+    "name": "Ubuntu Desktop",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntu.com/download/desktop",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://releases.ubuntu.com/24.04/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://releases.ubuntu.com/{version}/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://releases.ubuntu.com/26.04/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://releases.ubuntu.com/{version}/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-server",
+    "name": "Ubuntu Server",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntu.com/download/server",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-Server (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-Server (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://releases.ubuntu.com/24.04/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://releases.ubuntu.com/{version}/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-live-server-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://releases.ubuntu.com/26.04/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://releases.ubuntu.com/{version}/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-live-server-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "kubuntu",
+    "name": "Kubuntu",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://kubuntu.org/getkubuntu/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Kubuntu (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Kubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/kubuntu/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/kubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^kubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/kubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^kubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "xubuntu",
+    "name": "Xubuntu",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://xubuntu.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Xubuntu (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Xubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/xubuntu/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/xubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^xubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/xubuntu/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/xubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^xubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lubuntu",
+    "name": "Lubuntu",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://lubuntu.me/downloads/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Lubuntu (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Lubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/lubuntu/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/lubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^lubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/lubuntu/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/lubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^lubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-mate",
+    "name": "Ubuntu MATE",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntu-mate.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-MATE (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-MATE (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntu-mate/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntu-mate/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-mate-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-budgie",
+    "name": "Ubuntu Budgie",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntubudgie.org/downloads/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-Budgie (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-Budgie (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-budgie-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-budgie-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-studio",
+    "name": "Ubuntu Studio",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntustudio.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-Studio (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-Studio (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntustudio/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntustudio-(\\d+\\.\\d+(?:\\.\\d+)?)-(?:dvd|desktop)-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntustudio/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntustudio-(\\d+\\.\\d+(?:\\.\\d+)?)-(?:dvd|desktop)-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-cinnamon",
+    "name": "Ubuntu Cinnamon",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntucinnamon.org/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-Cinnamon (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-Cinnamon (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntucinnamon-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntucinnamon-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-unity",
+    "name": "Ubuntu Unity",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://ubuntuunity.org/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-Unity (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-Unity (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntu-unity/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntu-unity/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-unity-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntu-unity/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntu-unity/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntu-unity-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ubuntu-kylin",
+    "name": "Ubuntu Kylin",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://www.ubuntukylin.com/downloads/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Ubuntu-Kylin (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Ubuntu-Kylin (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntukylin/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntukylin/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntukylin-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/ubuntukylin/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/ubuntukylin/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^ubuntukylin-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "edubuntu",
+    "name": "Edubuntu",
+    "kind": "linux",
+    "organization": "Ubuntu",
+    "homepage": "https://www.edubuntu.org/download",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Edubuntu (\\d+\\.\\d+(?:\\.\\d+)?)(?: LTS)? amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Edubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "lts",
+        "name": "LTS",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/edubuntu/releases/24.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release-lts",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/edubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^edubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "latest",
+        "name": "Latest",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.ubuntu.com/edubuntu/releases/26.04/release/SHA256SUMS",
+          "index": {
+            "url": "https://changelogs.ubuntu.com/meta-release",
+            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "target": "https://cdimage.ubuntu.com/edubuntu/releases/{version}/release/SHA256SUMS"
+          },
+          "filePattern": "^edubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "linux-mint-cinnamon",
+    "name": "Linux Mint Cinnamon",
+    "kind": "linux",
+    "organization": "Linux Mint",
+    "homepage": "https://linuxmint.com/download.php",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Linux Mint (\\d+(?:\\.\\d+)?) Cinnamon",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Linux Mint (\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://mirrors.edge.kernel.org/linuxmint/stable/22.3/sha256sum.txt",
+          "index": {
+            "url": "https://mirrors.edge.kernel.org/linuxmint/stable/",
+            "pattern": "href=\"(\\d+(?:\\.\\d+)?)/\"",
+            "target": "https://mirrors.edge.kernel.org/linuxmint/stable/{version}/sha256sum.txt"
+          },
+          "filePattern": "^linuxmint-(\\d+(?:\\.\\d+)?)-cinnamon-64bit\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "linux-mint-mate",
+    "name": "Linux Mint MATE",
+    "kind": "linux",
+    "organization": "Linux Mint",
+    "homepage": "https://linuxmint.com/download.php",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Linux Mint (\\d+(?:\\.\\d+)?) Mate",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Linux Mint (\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://mirrors.edge.kernel.org/linuxmint/stable/22.3/sha256sum.txt",
+          "index": {
+            "url": "https://mirrors.edge.kernel.org/linuxmint/stable/",
+            "pattern": "href=\"(\\d+(?:\\.\\d+)?)/\"",
+            "target": "https://mirrors.edge.kernel.org/linuxmint/stable/{version}/sha256sum.txt"
+          },
+          "filePattern": "^linuxmint-(\\d+(?:\\.\\d+)?)-mate-64bit\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "linux-mint-xfce",
+    "name": "Linux Mint Xfce",
+    "kind": "linux",
+    "organization": "Linux Mint",
+    "homepage": "https://linuxmint.com/download.php",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Linux Mint (\\d+(?:\\.\\d+)?) Xfce",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Linux Mint (\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://mirrors.edge.kernel.org/linuxmint/stable/22.3/sha256sum.txt",
+          "index": {
+            "url": "https://mirrors.edge.kernel.org/linuxmint/stable/",
+            "pattern": "href=\"(\\d+(?:\\.\\d+)?)/\"",
+            "target": "https://mirrors.edge.kernel.org/linuxmint/stable/{version}/sha256sum.txt"
+          },
+          "filePattern": "^linuxmint-(\\d+(?:\\.\\d+)?)-xfce-64bit\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "lmde",
+    "name": "LMDE",
+    "kind": "linux",
+    "organization": "Linux Mint",
+    "homepage": "https://linuxmint.com/download_lmde.php",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^LMDE (\\d+) Cinnamon",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^LMDE (\\d+)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://mirrors.edge.kernel.org/linuxmint/debian/sha256sum.txt",
+          "filePattern": "^lmde-(\\d+)-cinnamon-64bit\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "pop-os",
+    "name": "Pop!_OS",
+    "kind": "linux",
+    "organization": "System76",
+    "homepage": "https://pop.system76.com/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Pop_OS \\d+\\.\\d+ amd64",
+    "channels": [
+      {
+        "id": "intel",
+        "name": "Intel/AMD",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://api.pop-os.org/builds/24.04/intel",
+          "versionKeys": [
+            "version",
+            "build"
+          ],
+          "isoURLKey": "url",
+          "sha256Key": "sha_sum",
+          "sizeKey": "size",
+          "fileNamePattern": "^pop-os_\\d+\\.\\d+_amd64_intel_\\d+\\.iso$"
+        }
+      },
+      {
+        "id": "nvidia",
+        "name": "NVIDIA",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://api.pop-os.org/builds/24.04/nvidia",
+          "versionKeys": [
+            "version",
+            "build"
+          ],
+          "isoURLKey": "url",
+          "sha256Key": "sha_sum",
+          "sizeKey": "size",
+          "fileNamePattern": "^pop-os_\\d+\\.\\d+_amd64_nvidia_\\d+\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "debian",
+    "name": "Debian",
+    "kind": "linux",
+    "organization": "Debian",
+    "homepage": "https://www.debian.org/distrib/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Debian (\\d+\\.\\d+\\.\\d+) amd64",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Debian GNU/Linux (\\d+\\.\\d+\\.\\d+)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "netinst",
+        "name": "netinst",
+        "volumeLabelPattern": "^Debian (\\d+\\.\\d+\\.\\d+) amd64 n",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-cd/SHA256SUMS",
+          "filePattern": "^debian-(\\d+\\.\\d+\\.\\d+)-amd64-netinst\\.iso$"
+        }
+      },
+      {
+        "id": "dvd",
+        "name": "DVD",
+        "volumeLabelPattern": "^Debian (\\d+\\.\\d+\\.\\d+) amd64 1",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current/amd64/iso-dvd/SHA256SUMS",
+          "filePattern": "^debian-(\\d+\\.\\d+\\.\\d+)-amd64-DVD-1\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "debian-live",
+    "name": "Debian Live",
+    "kind": "linux",
+    "organization": "Debian",
+    "homepage": "https://www.debian.org/CD/live/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^d-live (\\d+\\.\\d+\\.\\d+) ",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Debian GNU/Linux (\\d+\\.\\d+\\.\\d+)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "gnome",
+        "name": "GNOME",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA256SUMS",
+          "filePattern": "^debian-live-(\\d+\\.\\d+\\.\\d+)-amd64-gnome\\.iso$"
+        }
+      },
+      {
+        "id": "kde",
+        "name": "KDE Plasma",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA256SUMS",
+          "filePattern": "^debian-live-(\\d+\\.\\d+\\.\\d+)-amd64-kde\\.iso$"
+        }
+      },
+      {
+        "id": "xfce",
+        "name": "Xfce",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA256SUMS",
+          "filePattern": "^debian-live-(\\d+\\.\\d+\\.\\d+)-amd64-xfce\\.iso$"
+        }
+      },
+      {
+        "id": "cinnamon",
+        "name": "Cinnamon",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA256SUMS",
+          "filePattern": "^debian-live-(\\d+\\.\\d+\\.\\d+)-amd64-cinnamon\\.iso$"
+        }
+      },
+      {
+        "id": "mate",
+        "name": "MATE",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA256SUMS",
+          "filePattern": "^debian-live-(\\d+\\.\\d+\\.\\d+)-amd64-mate\\.iso$"
+        }
+      },
+      {
+        "id": "standard",
+        "name": "Standard (no desktop)",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.debian.org/debian-cd/current-live/amd64/iso-hybrid/SHA256SUMS",
+          "filePattern": "^debian-live-(\\d+\\.\\d+\\.\\d+)-amd64-standard\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "kali-linux",
+    "name": "Kali Linux",
+    "kind": "linux",
+    "organization": "Kali Linux",
+    "homepage": "https://www.kali.org/get-kali/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Kali Linux amd64",
+    "channels": [
+      {
+        "id": "installer",
+        "name": "Installer",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.kali.org/current/SHA256SUMS",
+          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-installer-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "netinst",
+        "name": "netinst",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.kali.org/current/SHA256SUMS",
+          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-installer-netinst-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "live",
+        "name": "Live",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.kali.org/current/SHA256SUMS",
+          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-live-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "everything",
+        "name": "Installer Everything",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.kali.org/current/SHA256SUMS",
+          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-installer-everything-amd64\\.iso$"
+        }
+      },
+      {
+        "id": "purple",
+        "name": "Purple",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://cdimage.kali.org/current/SHA256SUMS",
+          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-installer-purple-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "mx-linux",
+    "name": "MX Linux",
+    "kind": "linux",
+    "organization": "MX Linux",
+    "homepage": "https://mxlinux.org/download-links/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^MX-Live",
+    "channels": [
+      {
+        "id": "xfce",
+        "name": "Xfce",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirrors.rit.edu/mxlinux/mx-isos/MX/Final/Xfce/",
+          "linkPattern": "MX-(\\d+\\.\\d+)_Xfce_x64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "kde",
+        "name": "KDE Plasma",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirrors.rit.edu/mxlinux/mx-isos/MX/Final/KDE/",
+          "linkPattern": "MX-(\\d+\\.\\d+)_KDE_x64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "fluxbox",
+        "name": "Fluxbox",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirrors.rit.edu/mxlinux/mx-isos/MX/Final/Fluxbox/",
+          "linkPattern": "MX-(\\d+\\.\\d+)_fluxbox_x64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "proxmox-ve",
+    "name": "Proxmox VE",
+    "kind": "linux",
+    "organization": "Proxmox",
+    "homepage": "https://www.proxmox.com/en/downloads/proxmox-virtual-environment",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^PVE$",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^RELEASE='(\\d+\\.\\d+)'[\\r\\n]+ISORELEASE='(\\d+)'",
+        "versionTemplate": "$1-$2"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://enterprise.proxmox.com/iso/SHA256SUMS",
+          "filePattern": "^proxmox-ve_(\\d+\\.\\d+-\\d+)\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "proxmox-backup-server",
+    "name": "Proxmox Backup Server",
+    "kind": "linux",
+    "organization": "Proxmox",
+    "homepage": "https://www.proxmox.com/en/downloads/proxmox-backup-server",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^PBS$",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^RELEASE='(\\d+\\.\\d+)'[\\r\\n]+ISORELEASE='(\\d+)'",
+        "versionTemplate": "$1-$2"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://enterprise.proxmox.com/iso/SHA256SUMS",
+          "filePattern": "^proxmox-backup-server_(\\d+\\.\\d+-\\d+)\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "proxmox-mail-gateway",
+    "name": "Proxmox Mail Gateway",
+    "kind": "linux",
+    "organization": "Proxmox",
+    "homepage": "https://www.proxmox.com/en/downloads/proxmox-mail-gateway",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^PMG$",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^RELEASE='(\\d+\\.\\d+)'[\\r\\n]+ISORELEASE='(\\d+)'",
+        "versionTemplate": "$1-$2"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://enterprise.proxmox.com/iso/SHA256SUMS",
+          "filePattern": "^proxmox-mail-gateway_(\\d+\\.\\d+-\\d+)\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "proxmox-datacenter-manager",
+    "name": "Proxmox Datacenter Manager",
+    "kind": "linux",
+    "organization": "Proxmox",
+    "homepage": "https://www.proxmox.com/en/downloads/proxmox-datacenter-manager",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^PDM$",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^RELEASE='(\\d+\\.\\d+)'[\\r\\n]+ISORELEASE='(\\d+)'",
+        "versionTemplate": "$1-$2"
+      }
+    ],
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://enterprise.proxmox.com/iso/SHA256SUMS",
+          "filePattern": "^proxmox-datacenter-manager_(\\d+\\.\\d+-\\d+)\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-workstation",
+    "name": "Fedora Workstation",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/workstation/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Fedora-WS-Live-(\\d+)",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Workstation",
+            "subvariant": "Workstation",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Workstation-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-kde",
+    "name": "Fedora KDE Plasma Desktop",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Fedora-KDE-Desktop-Live-(\\d+)",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "KDE",
+            "subvariant": "KDE",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-KDE-Desktop-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-server",
+    "name": "Fedora Server",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/server/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Fedora-S-dvd-x86_64-(\\d+)",
+    "channels": [
+      {
+        "id": "dvd",
+        "name": "DVD",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Server",
+            "subvariant": "Server",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Server-dvd-x86_64-(\\d+)-[\\d.]+\\.iso$"
+        }
+      },
+      {
+        "id": "netinst",
+        "name": "netinst",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Server",
+            "subvariant": "Server",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Server-netinst-x86_64-(\\d+)-[\\d.]+\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-everything",
+    "name": "Fedora Everything",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Fedora-E-dvd-x86_64-(\\d+)",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Everything",
+            "subvariant": "Everything",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Everything-netinst-x86_64-(\\d+)-[\\d.]+\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-silverblue",
+    "name": "Fedora Silverblue",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Fedora-SB-ostree-x86_64-(\\d+)",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Silverblue",
+            "subvariant": "Silverblue",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Silverblue-ostree-x86_64-(\\d+)-[\\d.]+\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-kinoite",
+    "name": "Fedora Kinoite",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Fedora-Kinoite-ostree-x86_64-(\\d+)",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Kinoite",
+            "subvariant": "Kinoite",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Kinoite-ostree-x86_64-(\\d+)-[\\d.]+\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "fedora-spins",
+    "name": "Fedora Spins",
+    "kind": "linux",
+    "organization": "Fedora",
+    "homepage": "https://fedoraproject.org/spins/",
+    "isBuiltIn": true,
+    "channels": [
+      {
+        "id": "xfce",
+        "name": "Xfce",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "Xfce",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Xfce-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "cinnamon",
+        "name": "Cinnamon",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "Cinnamon",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Cinnamon-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "mate",
+        "name": "MATE-Compiz",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "Mate",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-MATE_Compiz-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "lxqt",
+        "name": "LXQt",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "LXQt",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-LXQt-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "lxde",
+        "name": "LXDE",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "LXDE",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-LXDE-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "sway",
+        "name": "Sway",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "Sway",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Sway-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "budgie",
+        "name": "Budgie",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "Budgie",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-Budgie-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "i3",
+        "name": "i3",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "i3",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-i3-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      },
+      {
+        "id": "cosmic",
+        "name": "COSMIC",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://fedoraproject.org/releases.json",
+          "filter": {
+            "variant": "Spins",
+            "subvariant": "COSMIC",
+            "arch": "x86_64"
+          },
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "link",
+          "sha256Key": "sha256",
+          "sizeKey": "size",
+          "fileNamePattern": "^Fedora-COSMIC-Live-(?:x86_64-)?(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "rocky-linux",
+    "name": "Rocky Linux",
+    "kind": "linux",
+    "organization": "Enterprise Linux",
+    "homepage": "https://rockylinux.org/download",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Rocky-(\\d+-\\d+)-x86_64",
+    "channels": [
+      {
+        "id": "minimal",
+        "name": "Minimal",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://download.rockylinux.org/pub/rocky/10/isos/x86_64/CHECKSUM",
+          "index": {
+            "url": "https://download.rockylinux.org/pub/rocky/",
+            "pattern": "href=\"(\\d+)/\"",
+            "target": "https://download.rockylinux.org/pub/rocky/{version}/isos/x86_64/CHECKSUM"
+          },
+          "filePattern": "^Rocky-(\\d+\\.\\d+)-x86_64-minimal\\.iso$"
+        }
+      },
+      {
+        "id": "dvd",
+        "name": "DVD",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://download.rockylinux.org/pub/rocky/10/isos/x86_64/CHECKSUM",
+          "index": {
+            "url": "https://download.rockylinux.org/pub/rocky/",
+            "pattern": "href=\"(\\d+)/\"",
+            "target": "https://download.rockylinux.org/pub/rocky/{version}/isos/x86_64/CHECKSUM"
+          },
+          "filePattern": "^Rocky-(\\d+\\.\\d+)-x86_64-dvd1\\.iso$"
+        }
+      },
+      {
+        "id": "boot",
+        "name": "Boot",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://download.rockylinux.org/pub/rocky/10/isos/x86_64/CHECKSUM",
+          "index": {
+            "url": "https://download.rockylinux.org/pub/rocky/",
+            "pattern": "href=\"(\\d+)/\"",
+            "target": "https://download.rockylinux.org/pub/rocky/{version}/isos/x86_64/CHECKSUM"
+          },
+          "filePattern": "^Rocky-(\\d+\\.\\d+)-x86_64-boot\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "almalinux",
+    "name": "AlmaLinux",
+    "kind": "linux",
+    "organization": "Enterprise Linux",
+    "homepage": "https://almalinux.org/get-almalinux/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^AlmaLinux-(\\d+-\\d+)-x86_64",
+    "channels": [
+      {
+        "id": "minimal",
+        "name": "Minimal",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://repo.almalinux.org/almalinux/10/isos/x86_64/CHECKSUM",
+          "index": {
+            "url": "https://repo.almalinux.org/almalinux/",
+            "pattern": "href=\"(\\d+)/\"",
+            "target": "https://repo.almalinux.org/almalinux/{version}/isos/x86_64/CHECKSUM"
+          },
+          "filePattern": "^AlmaLinux-(\\d+\\.\\d+)-x86_64-minimal\\.iso$"
+        }
+      },
+      {
+        "id": "dvd",
+        "name": "DVD",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://repo.almalinux.org/almalinux/10/isos/x86_64/CHECKSUM",
+          "index": {
+            "url": "https://repo.almalinux.org/almalinux/",
+            "pattern": "href=\"(\\d+)/\"",
+            "target": "https://repo.almalinux.org/almalinux/{version}/isos/x86_64/CHECKSUM"
+          },
+          "filePattern": "^AlmaLinux-(\\d+\\.\\d+)-x86_64-dvd\\.iso$"
+        }
+      },
+      {
+        "id": "boot",
+        "name": "Boot",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://repo.almalinux.org/almalinux/10/isos/x86_64/CHECKSUM",
+          "index": {
+            "url": "https://repo.almalinux.org/almalinux/",
+            "pattern": "href=\"(\\d+)/\"",
+            "target": "https://repo.almalinux.org/almalinux/{version}/isos/x86_64/CHECKSUM"
+          },
+          "filePattern": "^AlmaLinux-(\\d+\\.\\d+)-x86_64-boot\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "centos-stream",
+    "name": "CentOS Stream",
+    "kind": "linux",
+    "organization": "Enterprise Linux",
+    "homepage": "https://www.centos.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^CentOS-Stream-(\\d+)-BaseOS-x86_64",
+    "channels": [
+      {
+        "id": "dvd",
+        "name": "DVD",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirror.stream.centos.org/10-stream/BaseOS/x86_64/iso/",
+          "index": {
+            "url": "https://mirror.stream.centos.org/",
+            "pattern": "href=\"(\\d+)-stream/\"",
+            "target": "https://mirror.stream.centos.org/{version}-stream/BaseOS/x86_64/iso/"
+          },
+          "linkPattern": "CentOS-Stream-(\\d+-\\d{8}\\.\\d+)-x86_64-dvd1\\.iso$",
+          "checksumSuffix": ".SHA256SUM"
+        }
+      },
+      {
+        "id": "boot",
+        "name": "Boot",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirror.stream.centos.org/10-stream/BaseOS/x86_64/iso/",
+          "index": {
+            "url": "https://mirror.stream.centos.org/",
+            "pattern": "href=\"(\\d+)-stream/\"",
+            "target": "https://mirror.stream.centos.org/{version}-stream/BaseOS/x86_64/iso/"
+          },
+          "linkPattern": "CentOS-Stream-(\\d+-\\d{8}\\.\\d+)-x86_64-boot\\.iso$",
+          "checksumSuffix": ".SHA256SUM"
+        }
+      }
+    ]
+  },
+  {
+    "id": "opensuse-leap",
+    "name": "openSUSE Leap",
+    "kind": "linux",
+    "organization": "openSUSE",
+    "homepage": "https://get.opensuse.org/leap/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Install-Leap-(\\d+\\.\\d+)-x86_64",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Offline installer",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://download.opensuse.org/distribution/leap/16.1/offline/",
+          "index": {
+            "url": "https://download.opensuse.org/distribution/leap/",
+            "pattern": "href=\"\\./(1\\d\\.\\d+)/\"",
+            "target": "https://download.opensuse.org/distribution/leap/{version}/offline/"
+          },
+          "linkPattern": "Leap-(\\d+\\.\\d+)-offline-installer-x86_64\\.install\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "opensuse-tumbleweed",
+    "name": "openSUSE Tumbleweed",
+    "kind": "linux",
+    "organization": "openSUSE",
+    "homepage": "https://get.opensuse.org/tumbleweed/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^openSUSE-Tumbleweed-DVD-x86_64",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Rolling (DVD)",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://download.opensuse.org/tumbleweed/iso/",
+          "linkPattern": "openSUSE-Tumbleweed-DVD-x86_64-Snapshot(\\d{8})-Media\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "arch",
+    "name": "Arch Linux",
+    "kind": "linux",
+    "organization": "Arch",
+    "homepage": "https://archlinux.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^ARCH_\\d{6}",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Monthly",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://archlinux.org/iso/latest/sha256sums.txt",
+          "filePattern": "^archlinux-(\\d{4}\\.\\d{2}\\.\\d{2})-x86_64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "manjaro",
+    "name": "Manjaro",
+    "kind": "linux",
+    "organization": "Arch",
+    "homepage": "https://manjaro.org/products/download/x86",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^MANJARO_[A-Z]+_",
+    "channels": [
+      {
+        "id": "kde",
+        "name": "KDE Plasma",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://manjaro.org/products/download/x86",
+          "linkPattern": "manjaro-kde-(\\d+\\.\\d+(?:\\.\\d+)?)-\\d+-linux\\d+\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "gnome",
+        "name": "GNOME",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://manjaro.org/products/download/x86",
+          "linkPattern": "manjaro-gnome-(\\d+\\.\\d+(?:\\.\\d+)?)-\\d+-linux\\d+\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "xfce",
+        "name": "Xfce",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://manjaro.org/products/download/x86",
+          "linkPattern": "manjaro-xfce-(\\d+\\.\\d+(?:\\.\\d+)?)-\\d+-linux\\d+\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "cachyos",
+    "name": "CachyOS",
+    "kind": "linux",
+    "organization": "Arch",
+    "homepage": "https://cachyos.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^CACHY_",
+    "channels": [
+      {
+        "id": "desktop",
+        "name": "Desktop",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirror.cachyos.org/ISO/desktop/260809/",
+          "index": {
+            "url": "https://mirror.cachyos.org/ISO/desktop/",
+            "pattern": "href=\"(\\d{6})/\"",
+            "target": "https://mirror.cachyos.org/ISO/desktop/{version}/"
+          },
+          "linkPattern": "cachyos-desktop-linux-(\\d{6})\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "handheld",
+        "name": "Handheld",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirror.cachyos.org/ISO/handheld/260809/",
+          "index": {
+            "url": "https://mirror.cachyos.org/ISO/handheld/",
+            "pattern": "href=\"(\\d{6})/\"",
+            "target": "https://mirror.cachyos.org/ISO/handheld/{version}/"
+          },
+          "linkPattern": "cachyos-handheld-linux-(\\d{6})\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "nixos",
+    "name": "NixOS",
+    "kind": "linux",
+    "organization": "NixOS",
+    "homepage": "https://nixos.org/download/",
+    "isBuiltIn": true,
+    "channels": [
+      {
+        "id": "graphical",
+        "name": "Graphical (GNOME)",
+        "volumeLabelPattern": "^nixos-graphical-[\\d.]+-x86_64",
+        "provider": {
+          "mechanism": "staticURL",
+          "url": "https://channels.nixos.org/nixos-26.05/latest-nixos-graphical-x86_64-linux.iso",
+          "checksumURL": "https://channels.nixos.org/nixos-26.05/latest-nixos-graphical-x86_64-linux.iso.sha256",
+          "fileNamePattern": "^(?:latest-)?nixos-graphical-(?:[0-9A-Za-z.]+-)?x86_64-linux\\.iso$"
+        }
+      },
+      {
+        "id": "minimal",
+        "name": "Minimal",
+        "volumeLabelPattern": "^nixos-minimal-[\\d.]+-x86_64",
+        "provider": {
+          "mechanism": "staticURL",
+          "url": "https://channels.nixos.org/nixos-26.05/latest-nixos-minimal-x86_64-linux.iso",
+          "checksumURL": "https://channels.nixos.org/nixos-26.05/latest-nixos-minimal-x86_64-linux.iso.sha256",
+          "fileNamePattern": "^(?:latest-)?nixos-minimal-(?:[0-9A-Za-z.]+-)?x86_64-linux\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "alpine",
+    "name": "Alpine Linux",
+    "kind": "linux",
+    "organization": "Alpine",
+    "homepage": "https://alpinelinux.org/downloads/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^alpine-(?:standard|extended|virt)-(\\d+\\.\\d+\\.\\d+)",
+    "channels": [
+      {
+        "id": "standard",
+        "name": "Standard",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
+          "linkPattern": "alpine-standard-(\\d+\\.\\d+\\.\\d+)-x86_64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "extended",
+        "name": "Extended",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
+          "linkPattern": "alpine-extended-(\\d+\\.\\d+\\.\\d+)-x86_64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "virt",
+        "name": "Virtual",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://dl-cdn.alpinelinux.org/alpine/latest-stable/releases/x86_64/",
+          "linkPattern": "alpine-virt-(\\d+\\.\\d+\\.\\d+)-x86_64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "void-linux",
+    "name": "Void Linux",
+    "kind": "linux",
+    "organization": "Void",
+    "homepage": "https://voidlinux.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^VOID_LIVE$",
+    "channels": [
+      {
+        "id": "xfce",
+        "name": "Xfce (glibc)",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://repo-default.voidlinux.org/live/current/sha256sum.txt",
+          "filePattern": "^void-live-x86_64-(\\d{8})-xfce\\.iso$"
+        }
+      },
+      {
+        "id": "base",
+        "name": "Base (glibc)",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://repo-default.voidlinux.org/live/current/sha256sum.txt",
+          "filePattern": "^void-live-x86_64-(\\d{8})-base\\.iso$"
+        }
+      },
+      {
+        "id": "musl-xfce",
+        "name": "Xfce (musl)",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://repo-default.voidlinux.org/live/current/sha256sum.txt",
+          "filePattern": "^void-live-x86_64-musl-(\\d{8})-xfce\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gentoo",
+    "name": "Gentoo",
+    "kind": "linux",
+    "organization": "Gentoo",
+    "homepage": "https://www.gentoo.org/downloads/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Gentoo ",
+    "channels": [
+      {
+        "id": "minimal",
+        "name": "Minimal install",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://distfiles.gentoo.org/releases/amd64/autobuilds/current-install-amd64-minimal/",
+          "linkPattern": "install-amd64-minimal-(\\d{8})T\\d+Z\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      },
+      {
+        "id": "livegui",
+        "name": "LiveGUI",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://distfiles.gentoo.org/releases/amd64/autobuilds/current-livegui-amd64/",
+          "linkPattern": "livegui-amd64-(\\d{8})T\\d+Z\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "qubes-os",
+    "name": "Qubes OS",
+    "kind": "linux",
+    "organization": "Qubes",
+    "homepage": "https://www.qubes-os.org/downloads/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Qubes-R(\\d+\\.\\d+(?:\\.\\d+)?)-x86_64",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://mirrors.edge.kernel.org/qubes/iso/",
+          "linkPattern": "Qubes-R(\\d+\\.\\d+\\.\\d+)-x86_64\\.iso$",
+          "checksumSuffix": ".DIGESTS"
+        }
+      }
+    ]
+  },
+  {
+    "id": "parrot-os",
+    "name": "Parrot OS",
+    "kind": "linux",
+    "organization": "Parrot",
+    "homepage": "https://parrotsec.org/download/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^Parrot",
+    "contentProbes": [
+      {
+        "path": ".disk/info",
+        "pattern": "^Parrot (\\d+\\.\\d+)\\b"
+      }
+    ],
+    "channels": [
+      {
+        "id": "security",
+        "name": "Security",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://deb.parrot.sh/parrot/iso/7.3/signed-hashes.txt",
+          "index": {
+            "url": "https://deb.parrot.sh/parrot/iso/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
+            "target": "https://deb.parrot.sh/parrot/iso/{version}/signed-hashes.txt"
+          },
+          "filePattern": "^Parrot-security-(\\d+\\.\\d+)_amd64\\.iso$"
+        }
+      },
+      {
+        "id": "htb",
+        "name": "HTB edition",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://deb.parrot.sh/parrot/iso/7.3/signed-hashes.txt",
+          "index": {
+            "url": "https://deb.parrot.sh/parrot/iso/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
+            "target": "https://deb.parrot.sh/parrot/iso/{version}/signed-hashes.txt"
+          },
+          "filePattern": "^Parrot-spin-htb-(\\d+\\.\\d+)_amd64\\.iso$"
+        }
+      },
+      {
+        "id": "mate",
+        "name": "Home (MATE)",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://deb.parrot.sh/parrot/iso/7.3/signed-hashes.txt",
+          "index": {
+            "url": "https://deb.parrot.sh/parrot/iso/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
+            "target": "https://deb.parrot.sh/parrot/iso/{version}/signed-hashes.txt"
+          },
+          "filePattern": "^Parrot-spin-mate-(\\d+\\.\\d+)_amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "freebsd",
+    "name": "FreeBSD",
+    "kind": "linux",
+    "organization": "BSD",
+    "homepage": "https://www.freebsd.org/where/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^FreeBSD_Install$",
+    "channels": [
+      {
+        "id": "disc1",
+        "name": "Disc1 (installer)",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://download.freebsd.org/releases/amd64/amd64/ISO-IMAGES/15.1/CHECKSUM.SHA256-FreeBSD-15.1-RELEASE-amd64",
+          "index": {
+            "url": "https://download.freebsd.org/releases/amd64/amd64/ISO-IMAGES/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
+            "target": "https://download.freebsd.org/releases/amd64/amd64/ISO-IMAGES/{version}/CHECKSUM.SHA256-FreeBSD-{version}-RELEASE-amd64"
+          },
+          "filePattern": "^FreeBSD-(\\d+\\.\\d+)-RELEASE-amd64-disc1\\.iso$"
+        }
+      },
+      {
+        "id": "dvd1",
+        "name": "DVD1",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://download.freebsd.org/releases/amd64/amd64/ISO-IMAGES/15.1/CHECKSUM.SHA256-FreeBSD-15.1-RELEASE-amd64",
+          "index": {
+            "url": "https://download.freebsd.org/releases/amd64/amd64/ISO-IMAGES/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
+            "target": "https://download.freebsd.org/releases/amd64/amd64/ISO-IMAGES/{version}/CHECKSUM.SHA256-FreeBSD-{version}-RELEASE-amd64"
+          },
+          "filePattern": "^FreeBSD-(\\d+\\.\\d+)-RELEASE-amd64-dvd1\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "ghostbsd",
+    "name": "GhostBSD",
+    "kind": "linux",
+    "organization": "BSD",
+    "homepage": "https://www.ghostbsd.org/download",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^GhostBSD",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://download.ghostbsd.org/releases/amd64/latest/",
+          "linkPattern": "GhostBSD-(\\d+\\.\\d+)-[A-Za-z0-9.-]+\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "truenas-scale",
+    "name": "TrueNAS",
+    "kind": "linux",
+    "organization": "iXsystems",
+    "homepage": "https://www.truenas.com/download-truenas/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^TRUENAS",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://download.sys.truenas.net/",
+          "linkPattern": "TrueNAS-SCALE-(\\d+\\.\\d+\\.\\d+(?:\\.\\d+)?)\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "systemrescue",
+    "name": "SystemRescue",
+    "kind": "tool",
+    "organization": "Tools & rescue",
+    "homepage": "https://www.system-rescue.org",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^RESCUE\\d+",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://www.system-rescue.org/Download/",
+          "linkPattern": "systemrescue-(\\d+\\.\\d+)-amd64\\.iso$",
+          "checksumSuffix": ".sha256"
+        }
+      }
+    ]
+  },
+  {
+    "id": "gparted-live",
+    "name": "GParted Live",
+    "kind": "tool",
+    "organization": "Tools & rescue",
+    "homepage": "https://gparted.org/download.php",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^GParted-live",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://gparted.org/gparted-live/stable/CHECKSUMS.TXT",
+          "downloadBase": "https://downloads.sourceforge.net/gparted/",
+          "filePattern": "^gparted-live-(\\d+\\.\\d+\\.\\d+-\\d+)-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "clonezilla-live",
+    "name": "Clonezilla Live",
+    "kind": "tool",
+    "organization": "Tools & rescue",
+    "homepage": "https://clonezilla.org/downloads.php",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^(\\d+\\.\\d+\\.\\d+-\\d+)-amd64$",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "checksumFile",
+          "url": "https://free.nchc.org.tw/clonezilla-live/stable/CHECKSUMS.TXT",
+          "filePattern": "^clonezilla-live-(\\d+\\.\\d+\\.\\d+-\\d+)-amd64\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "memtest86plus",
+    "name": "Memtest86+",
+    "kind": "tool",
+    "organization": "Tools & rescue",
+    "homepage": "https://www.memtest.org/",
+    "isBuiltIn": true,
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "pageScrape",
+          "url": "https://www.memtest.org/",
+          "linkPattern": "mt86plus_(\\d+\\.\\d+)_x86_64\\.iso(?:\\.zip)?$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "tails",
+    "name": "Tails",
+    "kind": "tool",
+    "organization": "Tools & rescue",
+    "homepage": "https://tails.net/install/",
+    "isBuiltIn": true,
+    "volumeLabelPattern": "^TAILS (\\d+\\.\\d+(?:\\.\\d+)?) ",
+    "channels": [
+      {
+        "id": "default",
+        "name": "Stable",
+        "provider": {
+          "mechanism": "jsonFeed",
+          "url": "https://tails.net/install/v2/Tails/amd64/stable/latest.json",
+          "itemsPath": "installations",
+          "versionKeys": [
+            "version"
+          ],
+          "isoURLKey": "installation-paths.[type=iso].target-files.0.url",
+          "sha256Key": "installation-paths.[type=iso].target-files.0.sha256",
+          "sizeKey": "installation-paths.[type=iso].target-files.0.size",
+          "fileNamePattern": "^tails-amd64-(\\d+\\.\\d+(?:\\.\\d+)?)\\.iso$"
+        }
+      }
+    ]
+  },
+  {
+    "id": "windows-11",
+    "name": "Windows 11",
+    "kind": "windows",
+    "organization": "Microsoft",
+    "homepage": "https://www.microsoft.com/software-download/windows11",
+    "isBuiltIn": true,
+    "channels": [
+      {
+        "id": "default",
+        "name": "Current release",
+        "provider": {
+          "mechanism": "windowsManual",
+          "infoURL": "https://www.microsoft.com/software-download/windows11",
+          "downloadPage": "https://www.microsoft.com/software-download/windows11",
+          "versionPattern": "\\bVersion (\\d{2}H\\d)\\b",
+          "fileNamePattern": "^Win11(?:_(\\d{2}H\\d)|_\\d{4})?_[A-Za-z]+(?:[ _-][A-Za-z]+)*_(?:x64|x32|x86|arm64)(?:_?v\\d+)?\\.iso$",
+          "buildInfoURL": "https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information",
+          "buildPattern": ">{version}<[\\s\\S]{0,3000}?\\b(\\d{5}\\.\\d{1,5})\\b"
+        }
+      }
+    ]
+  },
+  {
+    "id": "windows-10",
+    "name": "Windows 10",
+    "kind": "windows",
+    "organization": "Microsoft",
+    "homepage": "https://www.microsoft.com/software-download/windows10",
+    "isBuiltIn": true,
+    "channels": [
+      {
+        "id": "default",
+        "name": "22H2 (ESU)",
+        "provider": {
+          "mechanism": "windowsManual",
+          "infoURL": "https://www.microsoft.com/software-download/windows10",
+          "downloadPage": "https://www.microsoft.com/software-download/windows10",
+          "versionPattern": "\\bVersion (\\d{2}H\\d)\\b",
+          "fileNamePattern": "^Win10(?:_(\\d{2}H\\d)|_\\d{4})?_[A-Za-z]+(?:[ _-][A-Za-z]+)*_(?:x64|x32|x86|arm64)(?:_?v\\d+)?\\.iso$",
+          "buildInfoURL": "https://learn.microsoft.com/en-us/windows/release-health/release-information",
+          "buildPattern": ">{version}<[\\s\\S]{0,3000}?\\b(\\d{5}\\.\\d{1,5})\\b"
+        }
+      }
+    ]
+  }
+]

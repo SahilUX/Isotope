@@ -1,0 +1,4 @@
+# a comment line
+SHA256 (openbsd-7.6-amd64.iso) = 7d9f4a2b6c1e8f3a5b0d2c4e6f8a1b3d5e7f9a1c3e5b7d9f1a3c5e7b9d1f3a5c
+MD5 (openbsd-7.6-amd64.iso) = a4c701431cd41f24b6557622d922918e
+SHA256 (openbsd-7.5-amd64.iso) = 1111112b6c1e8f3a5b0d2c4e6f8a1b3d5e7f9a1c3e5b7d9f1a3c5e7b9d1f3a5c

@@ -1,0 +1,105 @@
+name: Isotope
+options:
+  bundleIdPrefix: com.sahil
+  deploymentTarget:
+    macOS: "14.0"
+  createIntermediateGroups: true
+  groupSortPosition: top
+
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    # Universal binary (PRD N1) — Apple Silicon + Intel.
+    ARCHS: "$(ARCHS_STANDARD)"
+    DEAD_CODE_STRIPPING: YES
+    # Sign to run locally: no paid team required.
+    CODE_SIGN_STYLE: Automatic
+    CODE_SIGN_IDENTITY: "-"
+    CODE_SIGNING_REQUIRED: YES
+    CODE_SIGNING_ALLOWED: YES
+    DEVELOPMENT_TEAM: ""
+  configs:
+    # Debug builds the active arch only (local packages otherwise emit a single-arch
+    # module that a universal app slice cannot import); Release is universal (PRD N1).
+    Debug:
+      ONLY_ACTIVE_ARCH: YES
+    Release:
+      ONLY_ACTIVE_ARCH: NO
+
+packages:
+  IsotopeCore:
+    path: IsotopeCore
+
+targets:
+  Isotope:
+    type: application
+    platform: macOS
+    sources:
+      - path: Isotope
+        excludes:
+          - "Resources/**/.DS_Store"
+    dependencies:
+      - package: IsotopeCore
+        product: IsotopeCore
+    entitlements:
+      path: Isotope/Isotope.entitlements
+      properties:
+        # PRD §8 / DESIGN §9: the App Sandbox is gone in v1.1 — raw device
+        # access (`/dev/rdiskN` via authopen) is incompatible with it. The
+        # downloads entitlement went with it: plain file access covers the
+        # Windows hand-off flow now. The two bookmark entitlements stay because
+        # the Ventoy code paths still create and resolve bookmarks; outside the
+        # sandbox they are simply inert.
+        com.apple.security.network.client: true
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
+    info:
+      path: Isotope/Info.plist
+      properties:
+        CFBundleName: Isotope
+        CFBundleDisplayName: Isotope
+        # Programmatic icon (Scripts/make-app-icon.swift → iconutil). A plain
+        # .icns rather than an asset catalog: one file, no build-time compiler.
+        CFBundleIconFile: AppIcon
+        CFBundleShortVersionString: "0.1"
+        CFBundleVersion: "1"
+        LSMinimumSystemVersion: "14.0"
+        LSApplicationCategoryType: public.app-category.utilities
+        NSHumanReadableCopyright: ""
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sahil.isotope
+        PRODUCT_NAME: Isotope
+        ENABLE_HARDENED_RUNTIME: YES
+        COMBINE_HIDPI_IMAGES: YES
+        SWIFT_EMIT_LOC_STRINGS: YES
+
+  IsotopeTests:
+    type: bundle.unit-test
+    platform: macOS
+    sources:
+      - path: IsotopeTests
+    dependencies:
+      - target: Isotope
+      - package: IsotopeCore
+        product: IsotopeCore
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.sahil.isotope.tests
+        GENERATE_INFOPLIST_FILE: YES
+        BUNDLE_LOADER: "$(TEST_HOST)"
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/Isotope.app/Contents/MacOS/Isotope"
+
+schemes:
+  Isotope:
+    build:
+      targets:
+        Isotope: all
+        IsotopeTests: [test]
+    run:
+      config: Debug
+    test:
+      config: Debug
+      targets:
+        - IsotopeTests

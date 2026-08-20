@@ -1,0 +1,14 @@
+{
+  "build_target": "amd64",
+  "channel": "stable",
+  "installations": [
+    {
+      "installation-paths": [
+        {"target-files": [{"sha256": "b0a5f45e79221abe2c34f6e03f0cbf6b15af5e1df7c2e60cbf5c9af7586beb6f", "size": 1872756736, "url": "https://example.test/tails-amd64-7.10.1.img"}], "type": "img"},
+        {"target-files": [{"sha256": "0a6bc953f870bab062d738c2a29ec8c9c0143e3b211c2d182afcf9b288053c71", "size": 1862719488, "url": "https://example.test/tails-amd64-7.10.1.iso"}], "type": "iso"}
+      ],
+      "version": "7.10.1"
+    }
+  ],
+  "product-name": "Tails"
+}

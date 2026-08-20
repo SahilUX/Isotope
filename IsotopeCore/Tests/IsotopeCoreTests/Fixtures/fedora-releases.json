@@ -1,0 +1,6 @@
+[
+  {"version": "44", "arch": "aarch64", "link": "https://example.test/Fedora-Workstation-Live-44-1.7.aarch64.iso", "variant": "Workstation", "subvariant": "Workstation", "sha256": "aaaa295f6a00c27c3208f0c00b8ece4eab1ec69b9002152d97488bf26a426ddf", "size": "2851612672"},
+  {"version": "44", "arch": "x86_64", "link": "https://example.test/Fedora-Workstation-Live-44-1.7.x86_64.iso", "variant": "Workstation", "subvariant": "Workstation", "sha256": "1620295f6a00c27c3208f0c00b8ece4eab1ec69b9002152d97488bf26a426ddf", "size": "2851612672"},
+  {"version": "43", "arch": "x86_64", "link": "https://example.test/Fedora-Workstation-Live-43-1.6.x86_64.iso", "variant": "Workstation", "subvariant": "Workstation", "sha256": "2a4a16c009244eb5ab2198700eb04103793b62407e8596f30a3e0cc8ac294d77", "size": "2742190080"},
+  {"version": "45", "arch": "x86_64", "link": "https://example.test/Fedora-KDE-Live-45-1.1.x86_64.iso", "variant": "KDE", "subvariant": "KDE", "sha256": "3333295f6a00c27c3208f0c00b8ece4eab1ec69b9002152d97488bf26a426ddf", "size": "123"}
+]

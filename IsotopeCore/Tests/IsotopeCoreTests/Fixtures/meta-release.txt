@@ -1,0 +1,20 @@
+Dist: jammy
+Name: Jammy Jellyfish
+Version: 22.04.5 LTS
+Date: Thu, 21 April 2022 00:22:04 UTC
+Supported: 1
+Description: This is the 22.04.5 LTS release
+
+Dist: oracular
+Name: Oracular Oriole
+Version: 24.10
+Date: Thu, 10 October 2024 00:24:10 UTC
+Supported: 0
+Description: This is the 24.10 release
+
+Dist: noble
+Name: Noble Numbat
+Version: 24.04.4 LTS
+Date: Thu, 25 April 2024 00:24:04 UTC
+Supported: 1
+Description: This is the 24.04.4 LTS release
