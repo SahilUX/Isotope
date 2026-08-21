@@ -176,6 +176,11 @@ final class AppStore {
 
     var hasAnyDrives: Bool { !drives.isEmpty }
 
+    /// PRD F47: whether a placed ISO is deleted from the cache immediately.
+    /// Read by `UpdateEngine`/`FlashEngine`, which are actors and cannot touch
+    /// `settings` directly.
+    var discardsCacheAfterPlacement: Bool { settings.discardAfterPlacement }
+
     func status(for key: ReleaseKey) -> CheckStatus { checkStatus[key.description] ?? .never }
 
     func release(for key: ReleaseKey) -> Release? { releases[key.description] }

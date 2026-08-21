@@ -22,6 +22,20 @@ struct AppSettings: @unchecked Sendable {
         static let notificationsEnabled = "notificationsEnabled"
         static let autoResumeDownloads = "autoResumeDownloads"
         static let flashVerification = "flashVerification"
+        static let discardAfterPlacement = "discardCachedISOAfterPlacement"
+    }
+
+    /// PRD F47: delete a downloaded ISO from the cache the moment it has been
+    /// copied to a drive (or flashed onto one). **On by default.**
+    ///
+    /// The cache's only job is to save a second download; once the file is on
+    /// the stick, keeping a multi-gigabyte copy in `~/Library/Caches` is
+    /// hoarding, and the LRU cap only notices at 20 GB. Off keeps the old
+    /// behaviour, which is worth it if the same ISO goes onto several drives on
+    /// different days.
+    var discardAfterPlacement: Bool {
+        get { defaults.object(forKey: Key.discardAfterPlacement) as? Bool ?? true }
+        nonmutating set { defaults.set(newValue, forKey: Key.discardAfterPlacement) }
     }
 
     /// PRD F29: after writing an image, read the device back and compare

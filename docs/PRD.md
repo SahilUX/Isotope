@@ -161,3 +161,16 @@ Both address the same complaint: the app knows less than the drive does.
   - **`buildBehind`** — same feature release, older build on the drive. Displayed ("Newer build shipped"), and deliberately **not** counted as an update: Microsoft services Windows monthly but refreshes the download rarely, so a newer build often cannot be downloaded at all, and prompting for it would send the user to fetch the file they already have.
 
   Mounting a multi-gigabyte image is slow, so it runs after the scan, off the main actor, once per (assignment, file); a reconnect retries anything that could not be read.
+
+## 14. v1.6.1 addendum — the cache stops hoarding (2026-08-21)
+
+- **F47** **Delete a downloaded ISO once it is on the drive.** F20 gave the cache a 20 GB LRU cap, which means it happily sits at 19 GB of ISOs the user is already carrying on a USB stick. The cache exists to save a *second* download, not to keep a second copy of everything.
+
+  New setting, **on by default**: as soon as an ISO has been copied to a Ventoy drive or flashed onto a device, its cached copy is deleted. When an ISO was extracted from an archive (Memtest86+), the archive goes with it.
+
+  Three cases must not delete, and are tested as such:
+  - **Something is still using the file.** The existing cache holds already forbid eviction under a running copy; discard respects them.
+  - **Another queued operation needs the same ISO.** "Update All" across two sticks holding the same distro deletes only after the last one has it.
+  - **The operation failed.** A failed copy or flash keeps the download, so a retry does not mean fetching several gigabytes again.
+
+  Turning the setting off restores the F20 behaviour exactly: ISOs stay cached up to the limit. The reclaimed size is written into the history line ("…· freed 5.7 GB of cache") so the space going away is visible rather than mysterious. The Windows manual path is untouched — that file lives in the user's Downloads folder and is theirs, not Isotope's, to delete.

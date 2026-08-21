@@ -92,6 +92,30 @@ actor ISOCache {
         persist()
     }
 
+    /// PRD F47: drop an artifact as soon as it has been placed, rather than
+    /// leaving it to the LRU cap. Refuses while anything still holds it — a
+    /// second drive copying the same ISO must not have the file deleted from
+    /// under it — and takes the archive an ISO was extracted from with it, since
+    /// the `.zip` is dead weight once the `.iso` is gone.
+    ///
+    /// Returns the bytes actually reclaimed (0 when the key is held, unknown or
+    /// already gone), so the caller can report what it freed.
+    @discardableResult
+    func discardIfUnused(key: String) -> Int64 {
+        guard holds[key] == nil, let artifact = index.artifact(key: key) else { return 0 }
+        var removed: [CachedArtifact] = []
+        if let gone = index.remove(key: key) { removed.append(gone) }
+        // The parent archive, if this ISO came out of one and nothing is using
+        // the parent either.
+        if let parentKey = artifact.derivedFromKey, holds[parentKey] == nil,
+           index.derived(fromKey: parentKey) == nil, let parent = index.remove(key: parentKey) {
+            removed.append(parent)
+        }
+        delete(removed)
+        persist()
+        return removed.reduce(0) { $0 + $1.sizeBytes }
+    }
+
     func forget(key: String) {
         if let removed = index.remove(key: key) { delete([removed]) }
         persist()

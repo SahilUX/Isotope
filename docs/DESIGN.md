@@ -238,3 +238,13 @@ Refusals are structural, not stylistic: a non-WIM magic, a compressed XML resour
 
 ### Scheduling
 `refreshWindowsBuilds(driveID:)` runs after `scanAndReconcile` and after a placement. It filters to `kind == .windows` assignments with an installed file and no recorded build, skips any (assignment, file) already attempted (`AppStore.windowsBuildAttempts`), and does the mount in a detached utility-priority task. The write back to the drive re-checks that the file it read is still the installed one — an unplug or an update between mount and answer must not stamp a build onto a different ISO.
+
+## 11. v1.6.1 addendum — discard after placement (implements PRD F47)
+
+- **`ISOCache.discardIfUnused(key:)`** — removes the artifact from the index and deletes the file, refusing while `holds[key]` exists, and taking a parent archive with it when nothing else derives from it. Returns bytes reclaimed.
+- **`DownloadManager.endUse(cacheKey:discard:)`** — release the hold, then (when asked) discard. Releasing is already the moment the file becomes deletable, so it is the natural place for the decision. The `ISOProviding` protocol carries the `discard` flag so `UpdateEngine` can be tested against a fake.
+- **`UpdateEngine.queuedCacheKeys`** — a counted set of the cache keys the queue still has work for, incremented at `enqueue` (the key is derivable from the release before the operation runs) and decremented when each operation ends. `shouldDiscard` requires the count to be ≤ 1, which is what stops the first of two sticks from deleting the ISO the second is queued for.
+- **`FlashEngine`** sets `flashed = true` only on the success path; the `defer` reads it when it fires, so a failed flash keeps its download.
+- **`AppSettings.discardAfterPlacement`** defaults to `true`; `AppStore.discardsCacheAfterPlacement` exposes it to the two actors, which cannot touch the `@MainActor` store's properties directly.
+
+`PlacedISO.reclaimedCacheBytes` carries the freed size back to the store for the history line, so the deletion is reported rather than merely done.

@@ -77,6 +77,8 @@ final class FakeISOProvider: ISOProviding, @unchecked Sendable {
     private var behaviour: Behaviour
     private var _requests: [ISORequest] = []
     private var _endedKeys: [String] = []
+    /// PRD F47: keys the engine asked to have deleted from the cache outright.
+    private var _discardedKeys: [String] = []
     private var _pausedKeys: [String] = []
     private var _cancelledKeys: [String] = []
     /// Runs just before the file is handed back — the seam a test uses to make
@@ -89,6 +91,7 @@ final class FakeISOProvider: ISOProviding, @unchecked Sendable {
 
     var requests: [ISORequest] { lock.withLock { _requests } }
     var endedKeys: [String] { lock.withLock { _endedKeys } }
+    var discardedKeys: [String] { lock.withLock { _discardedKeys } }
     var pausedKeys: [String] { lock.withLock { _pausedKeys } }
     var cancelledKeys: [String] { lock.withLock { _cancelledKeys } }
 
@@ -111,7 +114,14 @@ final class FakeISOProvider: ISOProviding, @unchecked Sendable {
         }
     }
 
-    func endUse(cacheKey: String) async { lock.withLock { _endedKeys.append(cacheKey) } }
+    @discardableResult
+    func endUse(cacheKey: String, discard: Bool) async -> Int64 {
+        lock.withLock {
+            _endedKeys.append(cacheKey)
+            if discard { _discardedKeys.append(cacheKey) }
+        }
+        return discard ? 1_234 : 0
+    }
     func pause(cacheKey: String) async { lock.withLock { _pausedKeys.append(cacheKey) } }
     func resume(cacheKey: String) async {}
     func cancel(cacheKey: String) async { lock.withLock { _cancelledKeys.append(cacheKey) } }

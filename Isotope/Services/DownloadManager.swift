@@ -10,7 +10,11 @@ protocol ISOProviding: Sendable {
                         progress: @escaping @Sendable (DownloadStage, TransferProgress) -> Void)
         async throws -> LocalISO
     /// Balances the cache hold `ensureLocalISO` took, so eviction can resume.
-    func endUse(cacheKey: String) async
+    /// `discard` (PRD F47) additionally deletes the file now that it has been
+    /// placed, provided nothing else is still using it; the return is the bytes
+    /// that freed.
+    @discardableResult
+    func endUse(cacheKey: String, discard: Bool) async -> Int64
     func pause(cacheKey: String) async
     func resume(cacheKey: String) async
     func cancel(cacheKey: String) async
@@ -242,8 +246,15 @@ actor DownloadManager: ISOProviding {
         }
     }
 
-    func endUse(cacheKey: String) async {
+    /// PRD F47: releasing the hold is the moment the file becomes deletable, so
+    /// it is also the moment to delete it — the cache exists to save a second
+    /// download, not to accumulate ISOs the user already has on a stick.
+    /// Returns the bytes reclaimed, for the history line.
+    @discardableResult
+    func endUse(cacheKey: String, discard: Bool = false) async -> Int64 {
         await cache.release(key: cacheKey)
+        guard discard, !cacheKey.isEmpty else { return 0 }
+        return await cache.discardIfUnused(key: cacheKey)
     }
 
     // MARK: - Pause / resume / cancel

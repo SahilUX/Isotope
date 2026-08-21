@@ -224,7 +224,17 @@ actor FlashEngine {
                 store.updateOperationProgress(id: operationID, stage: stage, progress: progress)
             }
         }
-        defer { Task { [downloads] in await downloads.endUse(cacheKey: local.cacheKey) } }
+        // PRD F47: the image is on the device once this returns; the cached
+        // copy is then a duplicate of something the user is holding in their
+        // hand. `flashed` is set only on the success path, so a failed flash
+        // keeps the download for the retry.
+        var flashed = false
+        defer {
+            Task { [downloads, store, flashed] in
+                let wanted = await store.discardsCacheAfterPlacement
+                await downloads.endUse(cacheKey: local.cacheKey, discard: flashed && wanted)
+            }
+        }
         if flag.isSet { throw FlashError.cancelled }
 
         // 3 — gates again, now that the real image size is known and the
@@ -262,6 +272,7 @@ actor FlashEngine {
         // 6 — remount to pick up the new volume UUID (PRD F27, informational).
         await store.updateOperationPhase(id: request.id, phase: .finishing, totalBytes: local.sizeBytes)
         let remounted = await io.remount(bsdName: request.bsdName)
+        flashed = true
         return FlashedImage(fileName: finalName, version: request.release.version,
                             sizeBytes: local.sizeBytes, volumeUUID: remounted.volumeUUID,
                             volumeName: remounted.volumeName, verified: verified)

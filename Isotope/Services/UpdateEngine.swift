@@ -88,6 +88,9 @@ struct PlacedISO: Sendable {
     /// PRD F35: the old ISO that was kept instead of deleted, for the store to
     /// turn into a pinned assignment.
     var retainedFileName: String?
+    /// PRD F47: cache bytes freed by deleting the download once it was placed.
+    /// Zero when the setting is off, or when something else still needs the file.
+    var reclaimedCacheBytes: Int64 = 0
 }
 
 // MARK: - Engine
@@ -104,6 +107,11 @@ actor UpdateEngine {
     private var chains: [UUID: Task<Void, Never>] = [:]
     private var cancellations: [UUID: CancellationFlag] = [:]
     private var cacheKeys: [UUID: String] = [:]
+    /// PRD F47: cache keys the queue still has work for, counted. A placed ISO
+    /// is deleted straight away — but not while a *later* item in the same
+    /// batch is going to want the identical file, which is exactly what
+    /// "Update All" across two sticks holding the same distro produces.
+    private var queuedCacheKeys: [String: Int] = [:]
 
     var copyChunkSize = ChunkedCopy.defaultChunkSize
 
@@ -122,6 +130,7 @@ actor UpdateEngine {
     func enqueue(_ requests: [UpdateRequest]) async {
         for request in requests {
             cancellations[request.id] = CancellationFlag()
+            if let key = Self.cacheKey(for: request) { queuedCacheKeys[key, default: 0] += 1 }
             await store.beginOperation(for: request)
             let previous = chains[request.driveID]
             chains[request.driveID] = Task { [weak self] in
@@ -186,6 +195,7 @@ actor UpdateEngine {
         defer {
             cancellations[request.id] = nil
             cacheKeys[request.id] = nil
+            if let key = Self.cacheKey(for: request) { releaseQueued(key) }
         }
         if cancellations[request.id]?.isSet == true {
             await store.finishOperation(request: request, result: .failure(.cancelled))
@@ -278,12 +288,41 @@ actor UpdateEngine {
         do {
             let placed = try await place(local, request: request, snapshot: snapshot,
                                          volume: volume, finalName: finalName)
-            await downloads.endUse(cacheKey: local.cacheKey)
-            return placed
+            // PRD F47: it is on the drive now. Unless the user turned it off, or
+            // something else still needs this exact file, the cached copy goes.
+            let discard = await shouldDiscard(cacheKey: local.cacheKey)
+            let freed = await downloads.endUse(cacheKey: local.cacheKey, discard: discard)
+            var result = placed
+            result.reclaimedCacheBytes = freed
+            return result
         } catch {
-            await downloads.endUse(cacheKey: local.cacheKey)
+            // A failed copy leaves the download cached: retrying should not mean
+            // downloading four gigabytes a second time.
+            await downloads.endUse(cacheKey: local.cacheKey, discard: false)
             throw error
         }
+    }
+
+    /// True when the placed ISO should be deleted from the cache now: the
+    /// setting is on, and no other queued operation is waiting for the same file.
+    private func shouldDiscard(cacheKey: String) async -> Bool {
+        guard !cacheKey.isEmpty, await store.discardsCacheAfterPlacement else { return false }
+        // This operation's own entry is still counted, hence "> 1".
+        return (queuedCacheKeys[cacheKey] ?? 0) <= 1
+    }
+
+    private func releaseQueued(_ key: String) {
+        guard let count = queuedCacheKeys[key] else { return }
+        if count <= 1 { queuedCacheKeys[key] = nil } else { queuedCacheKeys[key] = count - 1 }
+    }
+
+    /// The cache key an update will use, known before it starts running.
+    private static func cacheKey(for request: UpdateRequest) -> String? {
+        guard let sourceURL = request.release.isoURL else { return nil }
+        let published = request.release.fileName.isEmpty
+            ? sourceURL.lastPathComponent : request.release.fileName
+        return DownloadArtifact.cacheKey(sha256: request.release.sha256,
+                                         sourceURL: sourceURL, fileName: published)
     }
 
     /// PRD §5.4: the user fetched the ISO themselves (Windows), so there is

@@ -37,6 +37,7 @@ Anything not in the catalog can be added as a **custom source** — four detecti
 - Only the specific old ISO being replaced is ever deleted; nothing else on the drive is touched.
 - Free-space pre-flight (counting the reclaimable old ISO) fails with the exact shortfall rather than running out mid-copy.
 - Updates **always** require explicit confirmation. Nothing is ever flashed or replaced automatically.
+- Downloaded ISOs are **deleted as soon as they are on the drive** (on by default). The cache is there to save a second download, not to keep a second copy of what you are already carrying on a stick — an image another queued drive still needs is kept until that drive has it too, and a failed copy keeps its download for the retry.
 
 **Handles the awkward cases honestly:**
 
@@ -159,9 +160,11 @@ docs/                 BRD, PRD, technical design
 | Path | Contents |
 |---|---|
 | `~/Library/Application Support/Isotope/` | `drives.json`, `custom-sources.json`, `release-cache.json`, `history.json` |
-| `~/Library/Caches/Isotope/` | Downloaded ISOs in `isos/` (LRU, 20 GB cap by default, clearable in Settings), plus `cache-index.json` and interrupted-download resume data |
+| `~/Library/Caches/Isotope/` | Downloaded ISOs in `isos/`, plus `cache-index.json` and interrupted-download resume data |
 
-All state is human-readable JSON. Downloading the same ISO for a second drive reuses the cache.
+All state is human-readable JSON.
+
+**The cache does not accumulate.** By default an ISO is deleted the moment it has been copied or flashed, so `~/Library/Caches/Isotope/` stays near empty between updates; what remains is interrupted downloads and anything still in use. Turn *Delete a downloaded ISO once it is on the drive* off in Settings and ISOs are kept instead, up to the cache limit (20 GB by default, LRU, clearable in Settings) — worth it if the same image goes onto several drives on different days, since the second drive then needs no download.
 
 No telemetry. The app talks only to the ISO sources in the catalog, their checksum files, and the GitHub API for entries that use it.
 
@@ -169,7 +172,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 217 unit tests in `IsotopeCore`, 138 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 217 unit tests in `IsotopeCore`, 149 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

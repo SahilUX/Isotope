@@ -51,7 +51,10 @@ struct SettingsView: View {
                             .disabled(clearing || (cacheBytes ?? 0) == 0)
                     }
                 }
-                Text("Cached ISOs let a second drive be updated without downloading again. Files a copy is using right now are never cleared.")
+                // PRD F47: on by default — the cache is a download-saver, not a
+                // second copy of every ISO the user already has on a stick.
+                Toggle("Delete a downloaded ISO once it is on the drive", isOn: discardAfterPlacementBinding)
+                Text("On (the default), a download is deleted the moment it has been copied or flashed, so ISOs do not pile up in ~/Library/Caches — an image another drive is still waiting for is kept until that drive has it too. Off, ISOs stay cached up to the limit above, so updating a second drive on another day needs no download. Files a copy is using right now are never deleted either way.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
@@ -125,6 +128,11 @@ struct SettingsView: View {
                 Task { await downloads.setMaxConcurrent(value) }
             }
         })
+    }
+
+    private var discardAfterPlacementBinding: Binding<Bool> {
+        Binding(get: { store.settings.discardAfterPlacement },
+                set: { store.settings.discardAfterPlacement = $0 })
     }
 
     private var cacheCapacityBinding: Binding<Int64> {

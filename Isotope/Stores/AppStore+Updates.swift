@@ -371,11 +371,16 @@ extension AppStore {
             }
             applyPlacement(placed, request: request)
             let replaced = placed.removedFileName.map { " (replaced \($0))" } ?? ""
+            // PRD F47: say so when the download was deleted again, so the
+            // reclaimed space is visible rather than mysterious.
+            let reclaimed = placed.reclaimedCacheBytes > 0
+                ? " · freed \(ByteCountFormatter.string(fromByteCount: placed.reclaimedCacheBytes, countStyle: .file)) of cache"
+                : ""
             event = HistoryEvent(driveID: request.driveID, driveName: request.driveName,
                                  entryID: request.entryID, channelID: request.channelID,
                                  fileName: placed.fileName, version: placed.version,
                                  outcome: .succeeded,
-                                 message: "\(request.title) \(placed.version.raw)\(replaced)")
+                                 message: "\(request.title) \(placed.version.raw)\(replaced)\(reclaimed)")
         case .failure(let error):
             let cancelled = error == .cancelled
             mutateOperation(id: request.id) { operation in
