@@ -39,6 +39,12 @@ final class AppStore {
     /// PRD F7: `.iso` files on the drive that no assignment claims — informational only.
     var unknownISOFiles: [UUID: [String]] = [:]
     var lastScanAt: [UUID: Date] = [:]
+    /// PRD F62: which unclaimed ISOs the catalog recognises, per drive.
+    /// Derived from `unknownISOFiles` and the catalog — but *computed once per
+    /// scan* rather than per read: matching a handful of files against 106
+    /// channels is real work, and the drive view used to redo it twice on every
+    /// redraw, which a copy's progress ticks made continuous.
+    var detectedISOsByDrive: [UUID: [DetectedISO]] = [:]
     /// Size on disk of every ISO in each drive's folder, by filename (PRD F60).
     /// Transient like `unknownISOFiles`: it is the scan's own output, so it can
     /// never drift out of step with what is actually on the drive.
@@ -256,11 +262,15 @@ final class AppStore {
         customEntries.removeAll { $0.id == entry.id }
         customEntries.append(entry)
         persist(customEntries, to: locations.customSources)
+        // A new source may recognise a file already sitting on a drive, and the
+        // detection is only recomputed when something says so (PRD F62).
+        refreshDetectedISOs()
     }
 
     func removeCustomEntry(id: String) {
         customEntries.removeAll { $0.id == id }
         persist(customEntries, to: locations.customSources)
+        refreshDetectedISOs()
     }
 
     func setRelease(_ release: Release, for key: ReleaseKey) {

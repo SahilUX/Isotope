@@ -2,6 +2,61 @@ import Foundation
 
 // MARK: - Regex
 
+/// Compiled `NSRegularExpression`s, kept.
+///
+/// Compiling one costs tens of microseconds, which is nothing until it happens
+/// in a loop: matching a handful of files against every channel in the catalog
+/// is hundreds of compilations, and the drive view did exactly that on every
+/// redraw. `NSRegularExpression` is immutable and safe to match on from several
+/// threads, so one compiled copy per pattern serves everybody.
+final class RegexCache: @unchecked Sendable {
+    private struct Key: Hashable {
+        let pattern: String
+        let caseInsensitive: Bool
+    }
+
+    static let shared = RegexCache()
+    /// The catalog's patterns are a fixed set; the cap only exists so that a
+    /// pathological caller — the custom-source editor recompiling on every
+    /// keystroke — cannot grow this without bound.
+    private static let capacity = 512
+
+    private let lock = NSLock()
+    private var cache: [Key: NSRegularExpression] = [:]
+    private var compilations = 0
+
+    /// How many patterns have actually been compiled. The point of the cache is
+    /// that this stops growing once the catalog has been seen, and tests assert
+    /// exactly that rather than timing anything.
+    var compileCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return compilations
+    }
+
+    func regex(_ pattern: String, caseInsensitive: Bool) throws -> NSRegularExpression {
+        let key = Key(pattern: pattern, caseInsensitive: caseInsensitive)
+        lock.lock()
+        let cached = cache[key]
+        lock.unlock()
+        if let cached { return cached }
+
+        var options: NSRegularExpression.Options = []
+        if caseInsensitive { options.insert(.caseInsensitive) }
+        // Failures are not cached: they are rare, and remembering one would mean
+        // remembering a pattern the user is still typing.
+        guard let compiled = try? NSRegularExpression(pattern: pattern, options: options) else {
+            throw ProviderError.invalidRegex(pattern)
+        }
+        lock.lock()
+        if cache.count >= Self.capacity { cache.removeAll(keepingCapacity: true) }
+        cache[key] = compiled
+        compilations += 1
+        lock.unlock()
+        return compiled
+    }
+}
+
 /// Thin wrapper over `NSRegularExpression` (chosen over Swift's `Regex` because
 /// the patterns come from JSON/user input at runtime, and because it exists on Linux).
 public struct PatternMatcher: Sendable {
@@ -9,13 +64,7 @@ public struct PatternMatcher: Sendable {
     private let regex: NSRegularExpression
 
     public init(_ pattern: String, caseInsensitive: Bool = false) throws {
-        var options: NSRegularExpression.Options = []
-        if caseInsensitive { options.insert(.caseInsensitive) }
-        do {
-            self.regex = try NSRegularExpression(pattern: pattern, options: options)
-        } catch {
-            throw ProviderError.invalidRegex(pattern)
-        }
+        self.regex = try RegexCache.shared.regex(pattern, caseInsensitive: caseInsensitive)
         self.pattern = pattern
     }
 

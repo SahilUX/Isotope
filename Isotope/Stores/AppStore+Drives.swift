@@ -170,6 +170,7 @@ extension AppStore {
         removeDrive(id: id)
         driveIssues[id] = nil
         unknownISOFiles[id] = nil
+        detectedISOsByDrive[id] = nil
         isoSizes[id] = nil
         lastScanAt[id] = nil
         isScanning.remove(id)
@@ -262,6 +263,7 @@ extension AppStore {
         drive.lastSeenAt = result.scannedAt
         updateDrive(drive)
         unknownISOFiles[driveID] = result.unknownFiles
+        refreshDetectedISOs(driveID: driveID)
         lastScanAt[driveID] = result.scannedAt
         // PRD F60: sizes come from the same scan, so what the rows show is
         // always what the last listing actually saw.
@@ -272,14 +274,14 @@ extension AppStore {
 
     /// Unclaimed `.iso` files on a Ventoy drive that the catalog recognises.
     ///
-    /// Derived, never stored: `unknownISOFiles` is the scan's own output, so the
-    /// offers cannot drift out of step with it — a file that an assignment
-    /// claims disappears from here the moment the next reconcile runs.
+    /// Still derived from the scan's own output — `unknownISOFiles` — so the
+    /// offers cannot drift out of step with what is on the drive. What changed
+    /// (PRD F62) is *when*: once per scan, rather than on every read. Views read
+    /// this many times a second while a copy reports progress, and the matching
+    /// behind it is not free.
     func detectedISOs(on drive: ManagedDrive) -> [DetectedISO] {
         guard !drive.isFlashed else { return [] }
-        let unclaimed = unknownISOFiles[drive.id] ?? []
-        guard !unclaimed.isEmpty else { return [] }
-        return ISOContentMatcher.detect(unclaimedFiles: unclaimed, in: allEntries)
+        return detectedISOsByDrive[drive.id] ?? []
     }
 
     /// The rest of the unknown files — listed informationally, exactly as before
@@ -287,6 +289,22 @@ extension AppStore {
     func unrecognizedISOFiles(on drive: ManagedDrive) -> [String] {
         let recognized = Set(detectedISOs(on: drive).map(\.fileName))
         return (unknownISOFiles[drive.id] ?? []).filter { !recognized.contains($0) }
+    }
+
+    /// Recomputes the detection for one drive, or for every drive when the
+    /// catalog itself changed. The only place the matcher runs.
+    func refreshDetectedISOs(driveID: UUID? = nil) {
+        let targets = driveID.map { [$0] } ?? drives.map(\.id)
+        for id in targets {
+            guard let drive = drive(id: id), !drive.isFlashed else {
+                detectedISOsByDrive[id] = nil
+                continue
+            }
+            let unclaimed = unknownISOFiles[id] ?? []
+            detectedISOsByDrive[id] = unclaimed.isEmpty
+                ? []
+                : ISOContentMatcher.detect(unclaimedFiles: unclaimed, in: allEntries)
+        }
     }
 
     /// The channels a detection may be assigned to: the one that matched, or —
@@ -330,6 +348,7 @@ extension AppStore {
         // it locally instead — the next real scan settles it either way.
         if scanAndReconcile(driveID: driveID, now: now) == nil {
             unknownISOFiles[driveID]?.removeAll { $0 == detected.fileName }
+            refreshDetectedISOs(driveID: driveID)
         }
         // A new tracker may have something to announce on the next connect.
         lastAnnouncedUpdates[driveID] = nil

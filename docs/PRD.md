@@ -239,3 +239,13 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
   Reading the second rule into the first left a same-named replacement with nothing reclaimable and a shortfall equal to its own size. The two are now derived separately, and `requiresReclaimFirst` (F18) deletes the outgoing file before the copy in this case, exactly as it already did for a differently named one.
 
   Unchanged, deliberately: a drive set to **keep old versions**, or an item the user asked to **keep as a pinned copy** (F6/F35), still reserves room for both — those bytes are not Isotope's to spend, so such an update still fails honestly when the stick is too full.
+
+## 21. v1.9 addendum — the app stays responsive while it copies (2026-08-27)
+
+- **F62** **A copy must not cost the main thread.** The app showed a spinning cursor and stopped answering while copying an ISO — though the copy itself was already running off the main actor. The main thread was busy elsewhere, and three things were feeding it:
+
+  1. **Regexes were recompiled on every use.** Matching a drive's unclaimed files against the catalog compiled one `NSRegularExpression` per file per channel — measured at 9.7 ms per pass over the 106-channel catalog, and the drive view did two passes per redraw. Compiled patterns are now kept; a repeat is a lookup. (Measured: 9.7 ms → 1.7 ms.)
+  2. **The detection ran on every read.** `detectedISOs(on:)` recomputed the whole match each time a view asked, which is many times a second while a copy reports progress. It is computed once per scan — and once more when the catalog itself changes, so a new custom source still lights up a file already on the drive without waiting for a rescan.
+  3. **Every 4 MiB chunk redrew the UI.** Progress now reaches the interface at most ten times a second; the rate estimator still sees every chunk, and the final report is never dropped, so the bar still finishes where it should. The flash pipeline gets the same treatment.
+
+  Net effect: a redraw during a copy does no pattern matching at all, and gets asked for far less often.

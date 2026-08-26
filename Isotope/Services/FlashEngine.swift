@@ -307,6 +307,7 @@ actor FlashEngine {
                 defer { try? input.close() }
                 let hasher = hashing.makeHasher()
                 let rate = FlashRateBox()
+                let throttle = ProgressThrottle()
                 var written: Int64 = 0
                 while true {
                     if flag.isSet { throw FlashError.cancelled }
@@ -316,6 +317,7 @@ actor FlashEngine {
                     hasher.update(chunk)
                     written += Int64(chunk.count)
                     let progress = rate.record(written: written, total: total)
+                    guard throttle.shouldEmit(force: written >= total) else { continue }
                     Task { @MainActor in
                         store.updateOperationProgress(id: operationID, stage: nil, progress: progress)
                     }
@@ -365,6 +367,7 @@ actor FlashEngine {
                 defer { reader.close() }
                 let hasher = hashing.makeHasher()
                 let rate = FlashRateBox()
+                let throttle = ProgressThrottle()
                 var read: Int64 = 0
                 while read < byteCount {
                     if flag.isSet { throw FlashError.cancelled }

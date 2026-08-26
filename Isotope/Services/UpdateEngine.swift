@@ -447,6 +447,7 @@ actor UpdateEngine {
 
         do {
             let estimator = RateBox()
+            let throttle = ProgressThrottle()
             try await Task.detached(priority: .userInitiated) {
                 try ChunkedCopy.run(from: source, to: partURL, chunkSize: chunkSize, control: {
                     if flag.isSet { return .cancel }
@@ -455,6 +456,9 @@ actor UpdateEngine {
                     return FileManager.default.fileExists(atPath: folderPath) ? .proceed : .driveGone
                 }, progress: { written in
                     let snapshot = estimator.record(written: written, total: total)
+                    // PRD F62: the rate estimator sees every chunk; the UI does
+                    // not need to.
+                    guard throttle.shouldEmit(force: written >= total) else { return }
                     Task { @MainActor in
                         store.updateOperationProgress(id: operationID, stage: nil, progress: snapshot)
                     }

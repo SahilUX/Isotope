@@ -6,6 +6,41 @@ import Foundation
 /// `FileManager.copyItem` would be shorter but gives no progress and no way to
 /// stop, and an unplugged volume does not fail a write that is already buffered
 /// against an open descriptor — hence the explicit liveness check per chunk.
+/// How often a write loop is allowed to disturb the UI.
+///
+/// The copy itself runs off the main actor, but every progress report hops back
+/// on to it and invalidates the drive view. At one report per 4 MiB chunk a fast
+/// stick produces dozens a second, and the main thread spends its life
+/// redrawing a progress bar instead of answering the user — which is what a
+/// spinning cursor during a copy actually was.
+///
+/// Ten a second is more than the eye resolves and a fraction of the cost.
+final class ProgressThrottle: @unchecked Sendable {
+    static let defaultInterval: TimeInterval = 0.1
+
+    private let interval: TimeInterval
+    private let lock = NSLock()
+    private var lastEmitted: Date?
+
+    init(interval: TimeInterval = ProgressThrottle.defaultInterval) {
+        self.interval = interval
+    }
+
+    /// True when this report should be forwarded. `force` is for the last one,
+    /// which must always land so the bar finishes where it should.
+    func shouldEmit(force: Bool = false, now: Date = Date()) -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        guard !force else {
+            lastEmitted = now
+            return true
+        }
+        if let lastEmitted, now.timeIntervalSince(lastEmitted) < interval { return false }
+        lastEmitted = now
+        return true
+    }
+}
+
 enum ChunkedCopy {
     enum Control: Equatable {
         case proceed

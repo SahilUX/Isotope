@@ -501,6 +501,7 @@ extension AppStore {
         // informational "other ISOs" list if it was ever listed there.
         if let removed = placed.removedFileName {
             unknownISOFiles[request.driveID]?.removeAll { $0 == removed }
+            refreshDetectedISOs(driveID: request.driveID)
         }
     }
 
