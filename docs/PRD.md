@@ -257,3 +257,13 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 - **F64** **A hand-downloaded ISO can clear itself up.** Windows media is fetched by the user and lands in Downloads, where an 8.5 GB file then sits forever. New setting, **on by default**: once the ISO is on the drive, the download is moved to the **Trash**.
 
   Deliberately the Trash and not deletion. The cache is Isotope's own and is deleted outright (F47); this is the user's file, in their own folder, and they may still want it for another machine — so the space comes back while the decision stays reversible. Two refusals: a file that lives on the drive itself is never touched (Choose File… can point at one, and trashing it would delete the image just placed), and a failure to trash is silent, because a file that could not be moved is not a failed update. The history line says where it went.
+
+## 23. v1.11 addendum — a progress display that is telling the truth (2026-08-27)
+
+- **F65** **The copy reports the device's speed, not the page cache's.** A copy to a Ventoy stick showed 81.5 MB/s, then 202.6 MB/s, with the ETA shortening as it went. Measured against the same drive at the same moment with `iostat`: the device was doing **10–17 MB/s**. macOS was absorbing the writes into RAM and returning immediately, so the figure on screen was the speed of memory. When the cache filled, the writes began blocking at the real rate and the estimate collapsed; the final `synchronize()` then sat at 100% for minutes draining the backlog, which is indistinguishable from a hang. (The app was caught in an uninterruptible I/O wait doing exactly that.)
+
+  Both ends of the copy now set `F_NOCACHE`, so each write waits for the device and the rate shown is the rate happening — from the first chunk, not after the illusion runs out. It also stops an 8 GB ISO from evicting everything else from the page cache on its way past. Total time is unchanged: the bytes were always going to take as long as they take.
+
+- **F66** **The flush is part of the copy, and says so.** `ChunkedCopy` announces the final `synchronize()` so the operation switches to "Finishing" rather than sitting at 100% under "Copying to drive".
+
+- **F67** **The two progress bars quote the same number.** Activity's bar is the width of the window and the drive row's is 70 points, so an identical 10% looked like two different amounts of progress. Both rows now spell the percentage out beside the phase ("Copying to drive · 10%").

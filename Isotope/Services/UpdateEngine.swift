@@ -487,6 +487,12 @@ actor UpdateEngine {
                     Task { @MainActor in
                         store.updateOperationProgress(id: operationID, stage: nil, progress: snapshot)
                     }
+                }, willSynchronize: {
+                    // PRD F65: the last flush is part of the copy, and says so.
+                    Task { @MainActor in
+                        store.updateOperationPhase(id: operationID, phase: .finishing,
+                                                   totalBytes: total)
+                    }
                 })
             }.value
         } catch let failure as ChunkedCopy.Failure {

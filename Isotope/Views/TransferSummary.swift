@@ -37,6 +37,13 @@ enum TransferSummary {
         return parts.isEmpty ? nil : parts.joined(separator: " · ")
     }
 
+    /// "Copying to drive · 10%", or just the phase when there is no fraction to
+    /// quote (an indeterminate download, a hash in progress).
+    static func phaseAndPercent(_ phase: String, fraction: Double?) -> String {
+        guard let fraction, fraction.isFinite else { return phase }
+        return "\(phase) · \(Int((fraction * 100).rounded()))%"
+    }
+
     /// "1.2 GB of 8.47 GB", or just what is done when the total is unknown
     /// (a download with no `Content-Length`, a hash in progress).
     static func bytes(completed: Int64, total: Int64?) -> String {

@@ -324,7 +324,8 @@ private struct FlashOperationBadge: View {
             // and then reading back a whole device — so it says how fast and
             // how long, exactly as a copy does.
             VStack(alignment: .trailing, spacing: 1) {
-                Text(operation.phase.label)
+                Text(TransferSummary.phaseAndPercent(operation.phase.label,
+                                                     fraction: operation.fractionCompleted))
                 if let detail = TransferSummary.rateAndRemaining(bytesPerSecond: operation.bytesPerSecond,
                                                                  eta: operation.eta) {
                     Text(detail).monospacedDigit()

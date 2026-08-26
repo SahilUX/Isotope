@@ -298,3 +298,13 @@ The early delete now targets `replacedURL`. Its input is always the cache or the
 `TransferSummary` (app) formats rate, remaining time and byte counts; `ActivityView`, `OperationBadge` and `FlashOperationBadge` all read it, and `ActivityView`'s private `DateComponentsFormatter` moved into it. Each part returns nil rather than a placeholder, so a caller shows what is known and nothing else.
 
 `UpdateEngine.executeManual` trashes its source after a successful `place`, gated on `AppStore.trashesManualSourceAfterPlacement`. `trashSource(_:volume:)` is static and path-based so it is testable without a drive: it compares resolved, standardised paths and refuses anything at or under the destination volume, then uses `FileManager.trashItem`. `PlacedISO.trashedSourceName` carries the fact back for the history line.
+
+## 18. v1.11 addendum — honest transfer numbers (implements PRD F65–F67)
+
+`ChunkedCopy.bypassCache(_:)` sets `F_NOCACHE` on both descriptors and is deliberately non-fatal: a descriptor that refuses means the numbers are optimistic again, not that the data is at risk. It is `@discardableResult` and tested against a real descriptor and a bogus one.
+
+`ChunkedCopy.run` gained an optional `willSynchronize` callback, fired after the last write and before the flush; `UpdateEngine` uses it to move the operation to `.finishing`. The parameter is optional so the existing callers and their tests are untouched.
+
+`TransferSummary.phaseAndPercent(_:fraction:)` renders "Copying to drive · 10%", used by both drive-row badges. Activity keeps its full-width bar and byte counts.
+
+Worth keeping in mind for anything that writes to removable media: a write that returns quickly has not necessarily happened. `FlashEngine` was already honest, because a raw `/dev/rdiskN` write bypasses the cache by definition — which is why flash rates never showed this.

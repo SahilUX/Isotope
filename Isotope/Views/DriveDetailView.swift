@@ -623,7 +623,11 @@ private struct OperationBadge: View {
             // PRD F63: the row is where a copy is actually watched, so it says
             // how fast it is going and how long is left — not just that it is.
             VStack(alignment: .trailing, spacing: 1) {
-                Text(operation.isPaused ? "Paused" : operation.phase.label)
+                // The percentage is spelled out because this bar is 70pt wide
+                // and Activity's is the width of the window: the same 10% looks
+                // like two different amounts of progress otherwise.
+                Text(TransferSummary.phaseAndPercent(operation.isPaused ? "Paused" : operation.phase.label,
+                                                     fraction: operation.fractionCompleted))
                 if !operation.isPaused,
                    let detail = TransferSummary.rateAndRemaining(bytesPerSecond: operation.bytesPerSecond,
                                                                  eta: operation.eta) {

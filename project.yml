@@ -62,8 +62,8 @@ targets:
         # Programmatic icon (Scripts/make-app-icon.swift → iconutil). A plain
         # .icns rather than an asset catalog: one file, no build-time compiler.
         CFBundleIconFile: AppIcon
-        CFBundleShortVersionString: "0.2.1"
-        CFBundleVersion: "12"
+        CFBundleShortVersionString: "0.2.2"
+        CFBundleVersion: "13"
         LSMinimumSystemVersion: "14.0"
         LSApplicationCategoryType: public.app-category.utilities
         NSHumanReadableCopyright: ""
