@@ -39,6 +39,10 @@ final class AppStore {
     /// PRD F7: `.iso` files on the drive that no assignment claims — informational only.
     var unknownISOFiles: [UUID: [String]] = [:]
     var lastScanAt: [UUID: Date] = [:]
+    /// Size on disk of every ISO in each drive's folder, by filename (PRD F60).
+    /// Transient like `unknownISOFiles`: it is the scan's own output, so it can
+    /// never drift out of step with what is actually on the drive.
+    var isoSizes: [UUID: [String: Int64]] = [:]
     var isScanning: Set<UUID> = []
     /// (assignment, filename) pairs whose Windows media has already been
     /// inspected for its build (PRD F43 addendum), successfully or not. Mounting
@@ -179,6 +183,13 @@ final class AppStore {
     }
 
     var hasAnyDrives: Bool { !drives.isEmpty }
+
+    /// PRD F60: what one ISO on a drive takes up, or nil when the last scan
+    /// could not read it — the row then simply shows no size.
+    func isoSize(fileName: String?, on driveID: UUID) -> Int64? {
+        guard let fileName else { return nil }
+        return isoSizes[driveID]?[fileName]
+    }
 
     /// PRD F47: whether a placed ISO is deleted from the cache immediately.
     /// Read by `UpdateEngine`/`FlashEngine`, which are actors and cannot touch

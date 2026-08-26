@@ -160,7 +160,8 @@ struct DriveDetailView: View {
         if !unknown.isEmpty {
             Section {
                 ForEach(unknown, id: \.self) { name in
-                    Label(name, systemImage: "doc.questionmark")
+                    Label(name + isoSizeText(store.isoSize(fileName: name, on: drive.id)),
+                          systemImage: "doc.questionmark")
                         .font(.callout)
                         .foregroundStyle(.secondary)
                 }
@@ -485,11 +486,15 @@ private struct AssignmentRow: View {
 
     private var versionSummary: String {
         let installed = assignment.installed?.displayVersion ?? "Not installed"
+        // PRD F60: what this ISO takes up on the stick, where the last scan
+        // could read it. Appended rather than inserted, so the version
+        // comparison still reads as one phrase.
+        let size = isoSizeText(store.isoSize(fileName: assignment.installed?.fileName, on: driveID))
         // PRD F33: a pinned row is about the version it holds, not the one it
         // is missing.
-        guard !assignment.isPinned else { return "\(installed) · kept as is" }
+        guard !assignment.isPinned else { return "\(installed) · kept as is\(size)" }
         let latest = store.release(for: assignment)?.displayVersion ?? "unknown"
-        return "\(installed) → \(latest)"
+        return "\(installed) → \(latest)\(size)"
     }
 
     @ViewBuilder
@@ -517,6 +522,14 @@ private struct AssignmentRow: View {
     }
 }
 
+/// PRD F60: " · 8.47 GB" for a file on a drive, and nothing at all when the
+/// size is unknown — a scan that could not read the folder must leave the row
+/// exactly as it was rather than showing "0 bytes".
+private func isoSizeText(_ bytes: Int64?) -> String {
+    guard let bytes, bytes > 0 else { return "" }
+    return " · " + ByteCountFormatter.string(fromByteCount: bytes, countStyle: .file)
+}
+
 // MARK: - Detected ISO row (PRD F41)
 
 /// One recognised-but-untracked ISO: what Isotope thinks it is, and the two ways
@@ -533,7 +546,7 @@ private struct DetectedISORow: View {
                 .foregroundStyle(.secondary)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                Text(detected.fileName)
+                Text(detected.fileName + isoSizeText(store.isoSize(fileName: detected.fileName, on: driveID)))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                     .lineLimit(1)

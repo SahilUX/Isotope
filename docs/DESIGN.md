@@ -274,3 +274,9 @@ Refusals are structural, not stylistic: a non-WIM magic, a compressed XML resour
 `WindowsDownloadResolving` returns `WindowsDownloadAttempt` (`.resolved` / `.refused(String)` / `.failed(String)`) instead of an optional. The distinction is the feature: a refusal is Microsoft saying no and is expected, a failure is everything else, and an optional could express neither. `WindowsDownloadResolver.refusal(in:)` lifts `Errors[].Value` out of the payload so the UI quotes rather than paraphrases.
 
 `AppStore.attemptWindowsDownload(entryID:channelID:)` is the seam Settings' Test button uses — no drive, no assignment, and no dependence on the setting being on.
+
+## 14. v1.8 addendum — ISO sizes (implements PRD F60)
+
+`DriveAccess.isoSizes(inFolder:)` reads `.fileSizeKey` from the same directory enumeration the listing walks, and `isoSizes(bookmark:isoFolder:)` wraps it in the security scope. It is exposed as its own `DriveProbe` member rather than by widening `listISOs` to return pairs: the existing seam — and every test that injects it — stays exactly as it was, and a probe that cannot read sizes reports none instead of failing.
+
+`AppStore.isoSizes[driveID]` is written by `apply(_:to:)` alongside `unknownISOFiles`, so it is refreshed by every scan and dropped with the drive. `isoSize(fileName:on:)` is the single read the views use; `isoSizeText` in `DriveDetailView` renders " · 8.47 GB" or nothing at all.

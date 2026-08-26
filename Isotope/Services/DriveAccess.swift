@@ -125,6 +125,32 @@ enum DriveAccess {
         }
     }
 
+    /// Sizes of the visible ISOs in a folder, by filename. Read from the same
+    /// directory enumeration the listing uses, so a scan costs one pass.
+    static func isoSizes(inFolder folder: URL) throws -> [String: Int64] {
+        let contents = try FileManager.default.contentsOfDirectory(
+            at: folder, includingPropertiesForKeys: [.fileSizeKey, .isRegularFileKey], options: [])
+        var sizes: [String: Int64] = [:]
+        for url in contents where DriveScan.isISOFileName(url.lastPathComponent) {
+            let values = try? url.resourceValues(forKeys: [.fileSizeKey, .isRegularFileKey])
+            guard values?.isRegularFile != false, let size = values?.fileSize else { continue }
+            sizes[url.lastPathComponent] = Int64(size)
+        }
+        return sizes
+    }
+
+    /// `isoSizes(inFolder:)` with the bookmark's security scope held. A folder
+    /// that cannot be read yields no sizes rather than an error: a size is a
+    /// nicety, and a scan must never fail over one.
+    static func isoSizes(bookmark: Data, isoFolder: String) -> [String: Int64] {
+        guard let resolved = try? resolveBookmark(bookmark) else { return [:] }
+        return (try? withAccess(to: resolved.url) { volume -> [String: Int64] in
+            let folder = isoFolderURL(volume: volume, isoFolder: isoFolder)
+            guard FileManager.default.fileExists(atPath: folder.path) else { return [:] }
+            return (try? isoSizes(inFolder: folder)) ?? [:]
+        }) ?? [:]
+    }
+
     /// Lists the drive's ISO folder with the bookmark's security scope held.
     /// A missing folder reads as an empty listing: the user may simply not have
     /// created it yet, and a scan must never be destructive or fatal.
@@ -161,6 +187,13 @@ struct DriveProbe: Sendable {
     /// the one kind of media whose filename does not carry it (PRD F43
     /// addendum). Blocking: it mounts the image, so callers run it off the main
     /// actor. Nil for anything that is not Windows media, or will not say.
+    /// (bookmark, isoFolder) → each ISO's size on disk, by filename. Separate
+    /// from `listISOs` so the existing seam — and every test that uses it —
+    /// stays as it was; sizes are display detail, and a probe that cannot read
+    /// them simply reports none.
+    var isoSizes: @Sendable (Data, String) -> [String: Int64] = { bookmark, folder in
+        DriveAccess.isoSizes(bookmark: bookmark, isoFolder: folder)
+    }
     var windowsBuild: @Sendable (Data, String, String) -> String? = { bookmark, folder, fileName in
         guard let resolved = try? DriveAccess.resolveBookmark(bookmark) else { return nil }
         return try? DriveAccess.withAccess(to: resolved.url) { volume in

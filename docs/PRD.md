@@ -221,3 +221,9 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 - **F58** **A pattern that misses is never a dead end.** The sheet now also lists every *other* `.iso` in the folder, newest first, under a line saying nothing there is named the way this image usually is. A renamed download, or a vendor changing its naming, costs the user one extra click rather than sending them to a file dialog.
 
 - **F59** **"Cannot read the folder" is not "your download has not arrived".** macOS gates access to Downloads, and a denied read looked exactly like an empty folder. The watch reports the difference, and the sheet says where to grant access.
+
+## 19. v1.8 addendum — sizes on the drive (2026-08-27)
+
+- **F60** **Every ISO on a drive shows what it takes up.** A stick's free space was visible; where it had gone was not. Each tracked assignment now carries its file's size on the version line ("25H2 v2 (build 26200.8037) → … · 8.47 GB"), and the two informational lists — recognised-but-untracked ISOs and unrecognised files — carry theirs too.
+
+  Sizes are read during the scan that lists the folder, and held with the rest of the scan's transient output, so they cannot describe a file the drive no longer has. A folder that cannot be read yields no sizes rather than an error: a size is a nicety, and it must never be the reason a scan fails or a row shows "Zero KB".

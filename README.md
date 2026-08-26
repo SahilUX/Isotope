@@ -54,7 +54,7 @@ Anything not in the catalog can be added as a **custom source** — four detecti
 
 Register a mounted Ventoy volume, assign the ISOs you want tracked, and Isotope replaces them in place as new releases ship. It identifies drives by volume UUID and warns if a registered drive is reformatted.
 
-**Auto-detect:** ISOs already sitting on the drive are matched against the catalog and offered under "Found on this drive" — one click to start tracking one, or to pin it. Files it can't identify are listed but never touched.
+**Auto-detect:** ISOs already sitting on the drive are matched against the catalog and offered under "Found on this drive" — one click to start tracking one, or to pin it. Files it can't identify are listed but never touched. Every ISO shows its size, so it is clear where a full stick went.
 
 ### Flashed drives
 
@@ -181,7 +181,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 179 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 184 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

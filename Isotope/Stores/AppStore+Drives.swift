@@ -170,6 +170,7 @@ extension AppStore {
         removeDrive(id: id)
         driveIssues[id] = nil
         unknownISOFiles[id] = nil
+        isoSizes[id] = nil
         lastScanAt[id] = nil
         isScanning.remove(id)
         if selection == .drive(id) { selection = .drives }
@@ -262,6 +263,9 @@ extension AppStore {
         updateDrive(drive)
         unknownISOFiles[driveID] = result.unknownFiles
         lastScanAt[driveID] = result.scannedAt
+        // PRD F60: sizes come from the same scan, so what the rows show is
+        // always what the last listing actually saw.
+        isoSizes[driveID] = driveProbe.isoSizes(drive.bookmark, drive.isoFolder)
     }
 
     // MARK: Content auto-detect (PRD F41)
