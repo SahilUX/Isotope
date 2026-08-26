@@ -131,19 +131,15 @@ private struct OperationRow: View {
         if operation.isPaused { return "Paused · \(byteSummary)" }
         var parts = [operation.phase.label]
         if !byteSummary.isEmpty { parts.append(byteSummary) }
-        if let rate = operation.bytesPerSecond, rate > 0 {
-            parts.append("\(ByteCountFormatter.string(fromByteCount: Int64(rate), countStyle: .file))/s")
-        }
-        if let eta = operation.eta, eta.isFinite, eta > 0 {
-            parts.append("\(Self.duration.string(from: eta) ?? "") left")
+        if let detail = TransferSummary.rateAndRemaining(bytesPerSecond: operation.bytesPerSecond,
+                                                         eta: operation.eta) {
+            parts.append(detail)
         }
         return parts.joined(separator: " · ")
     }
 
     private var byteSummary: String {
-        let done = ByteCountFormatter.string(fromByteCount: operation.completedBytes, countStyle: .file)
-        guard let total = operation.totalBytes, total > 0 else { return done }
-        return "\(done) of \(ByteCountFormatter.string(fromByteCount: total, countStyle: .file))"
+        TransferSummary.bytes(completed: operation.completedBytes, total: operation.totalBytes)
     }
 
     private var terminalSummary: String {
@@ -171,13 +167,6 @@ private struct OperationRow: View {
         }
     }
 
-    private static let duration: DateComponentsFormatter = {
-        let formatter = DateComponentsFormatter()
-        formatter.allowedUnits = [.hour, .minute, .second]
-        formatter.unitsStyle = .abbreviated
-        formatter.maximumUnitCount = 2
-        return formatter
-    }()
 }
 
 // MARK: - Resume offer (PRD F19)

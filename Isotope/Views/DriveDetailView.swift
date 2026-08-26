@@ -620,10 +620,22 @@ private struct OperationBadge: View {
             } else {
                 ProgressView().controlSize(.small)
             }
-            Text(operation.isPaused ? "Paused" : operation.phase.label)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            // PRD F63: the row is where a copy is actually watched, so it says
+            // how fast it is going and how long is left — not just that it is.
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(operation.isPaused ? "Paused" : operation.phase.label)
+                if !operation.isPaused,
+                   let detail = TransferSummary.rateAndRemaining(bytesPerSecond: operation.bytesPerSecond,
+                                                                 eta: operation.eta) {
+                    Text(detail).monospacedDigit()
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
         }
+        .help(operation.isPaused
+              ? "Paused · \(TransferSummary.bytes(completed: operation.completedBytes, total: operation.totalBytes))"
+              : TransferSummary.bytes(completed: operation.completedBytes, total: operation.totalBytes))
     }
 }
 

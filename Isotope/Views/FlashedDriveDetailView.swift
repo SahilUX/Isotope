@@ -320,7 +320,19 @@ private struct FlashOperationBadge: View {
             } else {
                 ProgressView().controlSize(.small)
             }
-            Text(operation.phase.label).font(.caption).foregroundStyle(.secondary)
+            // PRD F63: a flash is the longest thing Isotope does — writing
+            // and then reading back a whole device — so it says how fast and
+            // how long, exactly as a copy does.
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(operation.phase.label)
+                if let detail = TransferSummary.rateAndRemaining(bytesPerSecond: operation.bytesPerSecond,
+                                                                 eta: operation.eta) {
+                    Text(detail).monospacedDigit()
+                }
+            }
+            .font(.caption)
+            .foregroundStyle(.secondary)
+            .help(TransferSummary.bytes(completed: operation.completedBytes, total: operation.totalBytes))
         }
     }
 }

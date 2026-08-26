@@ -130,6 +130,10 @@ struct WindowsManualSheet: View {
             step(1, "Open Microsoft's download page and choose the ISO for x64.")
             step(2, "Save it to your Downloads folder — Isotope is watching for it.")
             step(3, "Compare the checksum Microsoft shows with the one Isotope computes, then place it on “\(item.driveName)”.")
+            if store.settings.trashManualSourceAfterPlacement {
+                Text("Once it is on the drive, the download is moved to the Trash — Settings ▸ Windows turns that off.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             if let downloadPage {
                 Button("Open Microsoft Download Page", systemImage: "safari") {
                     NSWorkspace.shared.open(downloadPage)

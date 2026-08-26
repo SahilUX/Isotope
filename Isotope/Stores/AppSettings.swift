@@ -34,6 +34,23 @@ final class AppSettings {
         static let flashVerification = "flashVerification"
         static let discardAfterPlacement = "discardCachedISOAfterPlacement"
         static let windowsAutoDownload = "attemptWindowsAutoDownload"
+        static let trashManualSource = "trashManualSourceAfterPlacement"
+    }
+
+    /// PRD F64: after a hand-downloaded ISO (Windows) is placed on a drive,
+    /// move the download to the Trash. **On by default** — but to the *Trash*,
+    /// never straight to deletion.
+    ///
+    /// The distinction matters. The cache is Isotope's own (F47) and is deleted
+    /// outright; this is the user's file, in their own Downloads folder, and an
+    /// 8 GB ISO they might still want for another machine. The Trash keeps that
+    /// decision reversible while still clearing the space by default.
+    var trashManualSourceAfterPlacement: Bool {
+        get {
+            access(keyPath: \.trashManualSourceAfterPlacement)
+            return defaults.object(forKey: Key.trashManualSource) as? Bool ?? true
+        }
+        set { withMutation(keyPath: \.trashManualSourceAfterPlacement) { defaults.set(newValue, forKey: Key.trashManualSource) } }
     }
 
     /// PRD F49: try to fetch a Windows ISO without the browser before falling

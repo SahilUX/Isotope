@@ -202,6 +202,10 @@ final class AppStore {
     /// `settings` directly.
     var discardsCacheAfterPlacement: Bool { settings.discardAfterPlacement }
 
+    /// PRD F64: whether a hand-downloaded ISO goes to the Trash once it is on
+    /// the drive.
+    var trashesManualSourceAfterPlacement: Bool { settings.trashManualSourceAfterPlacement }
+
     func status(for key: ReleaseKey) -> CheckStatus { checkStatus[key.description] ?? .never }
 
     func release(for key: ReleaseKey) -> Release? { releases[key.description] }

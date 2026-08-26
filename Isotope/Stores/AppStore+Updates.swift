@@ -448,11 +448,14 @@ extension AppStore {
             let reclaimed = placed.reclaimedCacheBytes > 0
                 ? " · freed \(ByteCountFormatter.string(fromByteCount: placed.reclaimedCacheBytes, countStyle: .file)) of cache"
                 : ""
+            // PRD F64: moving someone's own download is worth saying out loud,
+            // including where it went.
+            let trashed = placed.trashedSourceName.map { " · moved “\($0)” to the Trash" } ?? ""
             event = HistoryEvent(driveID: request.driveID, driveName: request.driveName,
                                  entryID: request.entryID, channelID: request.channelID,
                                  fileName: placed.fileName, version: placed.version,
                                  outcome: .succeeded,
-                                 message: "\(request.title) \(placed.version.raw)\(replaced)\(reclaimed)")
+                                 message: "\(request.title) \(placed.version.raw)\(replaced)\(reclaimed)\(trashed)")
         case .failure(let error):
             let cancelled = error == .cancelled
             mutateOperation(id: request.id) { operation in

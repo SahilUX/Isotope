@@ -69,6 +69,12 @@ struct SettingsView: View {
                 Text("Microsoft's download service refuses requests that do not come from a browser, so this usually fails and Isotope falls back to opening the download page. When it does work, the ISO is checksum-verified like any other. Nothing is downloaded without your say-so either way.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // PRD F64: on by default, and to the Trash rather than gone.
+                Toggle("Move the downloaded ISO to the Trash once it is on the drive",
+                       isOn: trashManualSourceBinding)
+                Text("Windows ISOs are downloaded by hand and are yours, not Isotope's, so this moves them to the Trash rather than deleting them — the space comes back, and the file is still there if you want it. A file already on the drive is never touched.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 // The toggle alone tells you nothing about whether Microsoft
                 // will play along. This asks them, now, and shows the answer.
                 LabeledContent("Check whether it works") {
@@ -190,6 +196,11 @@ struct SettingsView: View {
                 Text(reason).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
             }
         }
+    }
+
+    private var trashManualSourceBinding: Binding<Bool> {
+        Binding(get: { store.settings.trashManualSourceAfterPlacement },
+                set: { store.settings.trashManualSourceAfterPlacement = $0 })
     }
 
     private var windowsAutoDownloadBinding: Binding<Bool> {

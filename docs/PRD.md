@@ -249,3 +249,11 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
   3. **Every 4 MiB chunk redrew the UI.** Progress now reaches the interface at most ten times a second; the rate estimator still sees every chunk, and the final report is never dropped, so the bar still finishes where it should. The flash pipeline gets the same treatment.
 
   Net effect: a redraw during a copy does no pattern matching at all, and gets asked for far less often.
+
+## 22. v1.10 addendum — speed, time remaining, and clearing the download (2026-08-27)
+
+- **F63** **Every transfer says how fast it is going and how long is left.** The measurements already existed — `TransferRateEstimator` feeds a rate and an ETA through every download, drive copy and flash — but only the Activity list printed them. The drive row, which is where a copy is actually watched, showed a bar and a phase name. Both drive rows (Ventoy and flashed) now carry "12.3 MB/s · 4 min left" under the phase, with the byte count in the tooltip, and all three surfaces format it through one helper so they cannot drift apart. Nothing is shown before the estimator has a usable reading — no "0 bytes/s" flicker at the start of a copy.
+
+- **F64** **A hand-downloaded ISO can clear itself up.** Windows media is fetched by the user and lands in Downloads, where an 8.5 GB file then sits forever. New setting, **on by default**: once the ISO is on the drive, the download is moved to the **Trash**.
+
+  Deliberately the Trash and not deletion. The cache is Isotope's own and is deleted outright (F47); this is the user's file, in their own folder, and they may still want it for another machine — so the space comes back while the decision stays reversible. Two refusals: a file that lives on the drive itself is never touched (Choose File… can point at one, and trashing it would delete the image just placed), and a failure to trash is silent, because a file that could not be moved is not a failed update. The history line says where it went.

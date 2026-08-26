@@ -41,7 +41,7 @@ Anything not in the catalog can be added as a **custom source** — four detecti
 
 **Handles the awkward cases honestly:**
 
-- **Windows** ISOs can't be hotlinked (Microsoft's links are session-generated), so Isotope tracks the current feature release, opens the official download page, then verifies and places the file you downloaded.
+- **Windows** ISOs can't be hotlinked (Microsoft's links are session-generated), so Isotope tracks the current feature release, opens the official download page, then verifies and places the file you downloaded. Once it is on the drive the download is moved to the Trash by default — your file, so it stays recoverable.
 - **Windows media** is identified by more than its name: Isotope asks Microsoft which revision of a release is currently being served, and reads the exact build out of the image itself. Rows read *25H2 (build 26200.6584) → 25H2 v2 (build 26200.9168)* instead of *25H2 → 25H2*.
 - **Memtest86+** ships only a zipped ISO upstream; Isotope unzips it before placing.
 - Where a version genuinely can't be determined, the app says "unknown" instead of guessing.
@@ -181,7 +181,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 247 unit tests in `IsotopeCore`, 190 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 247 unit tests in `IsotopeCore`, 199 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

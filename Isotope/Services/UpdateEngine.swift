@@ -91,6 +91,8 @@ struct PlacedISO: Sendable {
     /// PRD F47: cache bytes freed by deleting the download once it was placed.
     /// Zero when the setting is off, or when something else still needs the file.
     var reclaimedCacheBytes: Int64 = 0
+    /// PRD F64: the hand-downloaded file moved to the Trash after placing it.
+    var trashedSourceName: String?
 }
 
 // MARK: - Engine
@@ -368,8 +370,31 @@ actor UpdateEngine {
             throw UpdateError.copyFailed("“\(fileName)” could not be read from your Downloads folder.")
         }
         let local = LocalISO(url: sourceFile, fileName: fileName, sizeBytes: size, cacheKey: "")
-        return try await place(local, request: request, snapshot: snapshot,
-                               volume: volume, finalName: fileName)
+        var placed = try await place(local, request: request, snapshot: snapshot,
+                                     volume: volume, finalName: fileName)
+        // PRD F64: it is on the drive now, so the download has done its job.
+        if await store.trashesManualSourceAfterPlacement,
+           Self.trashSource(sourceFile, volume: volume) {
+            placed.trashedSourceName = sourceFile.lastPathComponent
+        }
+        return placed
+    }
+
+    /// Moves a hand-downloaded ISO to the Trash once it has been placed.
+    ///
+    /// Two refusals, both deliberate:
+    ///
+    /// * anything *on the drive itself* is left alone. "Choose File…" can point
+    ///   at an ISO already on the stick, and trashing that would delete the very
+    ///   file just placed — or another image the user keeps there;
+    /// * a failure is silent. Some volumes have no Trash, and a file that could
+    ///   not be moved is not a failed update.
+    static func trashSource(_ source: URL, volume: URL) -> Bool {
+        let sourcePath = source.resolvingSymlinksInPath().standardizedFileURL.path
+        let volumePath = volume.resolvingSymlinksInPath().standardizedFileURL.path
+        guard !sourcePath.hasPrefix(volumePath.hasSuffix("/") ? volumePath : volumePath + "/"),
+              sourcePath != volumePath else { return false }
+        return (try? FileManager.default.trashItem(at: source, resultingItemURL: nil)) != nil
     }
 
     /// Steps 4–6 of DESIGN §4.5: pre-flight, copy, rename, delete the old ISO.
