@@ -390,10 +390,28 @@ actor UpdateEngine {
         // reasons the drive-level "keep old versions" setting is — including the
         // pre-flight, which may not count its bytes as reclaimable.
         let keepsOldFile = snapshot.keepOldVersions || request.keepReplacedAsPinned
-        let oldName = snapshot.installedFileName.flatMap { $0 == finalName ? nil : $0 }
+        // PRD F61. The file being replaced plays two different parts, and
+        // conflating them is what made a same-named replacement impossible:
+        //
+        //  * its bytes are *reclaimable*, whatever it is called — deleting it
+        //    before the copy frees exactly that much;
+        //  * only a *differently* named one is deleted afterwards, because the
+        //    rename at the end already overwrote a file sharing the new name.
+        //
+        // Reading the second rule into the first is what produced "8.47 GB
+        // short" on a stick already holding 8.47 GB of the very file being
+        // replaced.
+        // What is on the drive now, whatever becomes of it. PRD F35 still needs
+        // this name when the user asked to keep the outgoing file as a pin, so
+        // it is deliberately *not* gated on `keepsOldFile`.
+        let installedName = snapshot.installedFileName
+        let oldName = installedName.flatMap { $0 == finalName ? nil : $0 }
         let oldURL = oldName.map { folder.appendingPathComponent($0) }
-        let oldSize = oldURL.flatMap(Self.fileSize) ?? 0
-        let reclaimable = keepsOldFile ? 0 : oldSize
+        // The bytes that may be freed before the copy: any name, but only when
+        // the drive is replacing rather than keeping. A file the user asked to
+        // keep is not Isotope's to spend.
+        let replacedURL = keepsOldFile ? nil : installedName.map { folder.appendingPathComponent($0) }
+        let reclaimable = replacedURL.flatMap(Self.fileSize) ?? 0
 
         // Free space is re-read here, not before the download: a long download
         // gives the user plenty of time to fill the stick from elsewhere.
@@ -405,9 +423,14 @@ actor UpdateEngine {
                                                 driveName: snapshot.driveName)
         }
 
+        // PRD F18: when it only fits once the old file is gone, the old file
+        // goes first — including when it shares the new name, which is the case
+        // that used to be refused outright. The source is always the cache or
+        // the user's Downloads folder, never this file, so removing it here
+        // cannot take the copy's own input with it.
         var removedEarly = false
-        if plan.requiresReclaimFirst, let oldURL {
-            try? manager.removeItem(at: oldURL)
+        if plan.requiresReclaimFirst, let replacedURL {
+            try? manager.removeItem(at: replacedURL)
             removedEarly = true
         }
 

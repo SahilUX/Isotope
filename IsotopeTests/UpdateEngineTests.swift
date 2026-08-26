@@ -41,6 +41,7 @@ final class UpdateEngineTests: XCTestCase {
                              sha256: String? = "abc123",
                              availableBytes: Int64 = 64 << 30,
                              isoSize: Int = 256 * 1024,
+                             installedSize: Int = 64 * 1024,
                              provider behaviour: FakeISOProvider.Behaviour? = nil) async throws -> Fixture {
         let store = AppStore(locations: StoreLocations(root: root.appendingPathComponent("state")),
                              catalogResourceURL: nil)
@@ -70,7 +71,7 @@ final class UpdateEngineTests: XCTestCase {
             var updated = store.drive(id: drive.id)!
             updated.assignments[0].installed = installed
             store.updateDrive(updated)
-            try TestFiles.write(volume.appendingPathComponent(installed.fileName), size: 64 * 1024)
+            try TestFiles.write(volume.appendingPathComponent(installed.fileName), size: installedSize)
         }
 
         let release = Release(version: .parse("24.04.4")!,
@@ -100,6 +101,68 @@ final class UpdateEngineTests: XCTestCase {
                                     keepReplacedAsPinned: keepReplacedAsPinned)
         await fixture.engine.enqueue([request])
         await fixture.engine.drain()
+    }
+
+    // MARK: - Replacing a file that shares the new name (PRD F61)
+
+    func testAnISOCanReplaceAFileOfTheSameNameOnAFullDrive() async throws {
+        // The reported case: a Ventoy stick with 589 MB free holding an 8.47 GB
+        // Windows ISO, asked to place the same media again under the same name.
+        // The bytes it is about to reclaim are the very bytes it needs.
+        let installed = InstalledISO(fileName: "ubuntu-24.04.4-desktop-amd64.iso",
+                                     version: .parse("24.04.4"), placedByApp: true)
+        let fixture = try await makeFixture(installed: installed,
+                                            availableBytes: 200 * 1024,   // not enough on its own
+                                            isoSize: 256 * 1024,
+                                            installedSize: 256 * 1024)    // but this is coming back
+        await run(fixture)
+
+        let placed = volume.appendingPathComponent("ubuntu-24.04.4-desktop-amd64.iso")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: placed.path))
+        XCTAssertEqual(TestFiles.size(placed), 256 * 1024)
+        // It succeeded, so nothing complained about room.
+        XCTAssertEqual(fixture.store.history.first?.outcome, .succeeded)
+        XCTAssertFalse(fixture.store.history.contains { $0.message?.contains("does not have room") == true })
+        // Nothing is reported as "replaced": the file kept its name.
+        XCTAssertNil(fixture.store.history.first?.message.flatMap { $0.contains("replaced") ? $0 : nil })
+        // And no half-written leftovers.
+        let listing = try FileManager.default.contentsOfDirectory(atPath: volume.path)
+        XCTAssertFalse(listing.contains { DownloadArtifact.isPartFileName($0) })
+    }
+
+    func testADriveThatIsGenuinelyTooSmallStillSaysSo() async throws {
+        // The other half of the fix: reclaiming the replaced file must not turn
+        // a real shortfall into a false pass.
+        let installed = InstalledISO(fileName: "ubuntu-24.04.4-desktop-amd64.iso",
+                                     version: .parse("24.04.4"), placedByApp: true)
+        let fixture = try await makeFixture(installed: installed,
+                                            availableBytes: 8 * 1024,
+                                            isoSize: 512 * 1024,
+                                            installedSize: 16 * 1024)
+        await run(fixture)
+
+        XCTAssertEqual(fixture.store.history.first?.outcome, .failed)
+        XCTAssertTrue(fixture.store.history.first?.message?.contains("does not have room") == true,
+                      fixture.store.history.first?.message ?? "no message")
+        // The old file is left alone when the copy was never attempted.
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: volume.appendingPathComponent(installed.fileName).path))
+    }
+
+    func testKeepingOldVersionsStillReservesRoomForBoth() async throws {
+        // PRD F6: the user asked to keep what is there, so its bytes are not
+        // Isotope's to spend — even when the incoming file shares its name.
+        let installed = InstalledISO(fileName: "ubuntu-24.04.3-desktop-amd64.iso",
+                                     version: .parse("24.04.3"), placedByApp: true)
+        let fixture = try await makeFixture(installed: installed, keepOldVersions: true,
+                                            availableBytes: 200 * 1024,
+                                            isoSize: 256 * 1024,
+                                            installedSize: 256 * 1024)
+        await run(fixture)
+
+        XCTAssertEqual(fixture.store.history.first?.outcome, .failed)
+        XCTAssertTrue(FileManager.default.fileExists(
+            atPath: volume.appendingPathComponent(installed.fileName).path))
     }
 
     // MARK: - Happy path

@@ -280,3 +280,9 @@ Refusals are structural, not stylistic: a non-WIM magic, a compressed XML resour
 `DriveAccess.isoSizes(inFolder:)` reads `.fileSizeKey` from the same directory enumeration the listing walks, and `isoSizes(bookmark:isoFolder:)` wraps it in the security scope. It is exposed as its own `DriveProbe` member rather than by widening `listISOs` to return pairs: the existing seam — and every test that injects it — stays exactly as it was, and a probe that cannot read sizes reports none instead of failing.
 
 `AppStore.isoSizes[driveID]` is written by `apply(_:to:)` alongside `unknownISOFiles`, so it is refreshed by every scan and dropped with the drive. `isoSize(fileName:on:)` is the single read the views use; `isoSizeText` in `DriveDetailView` renders " · 8.47 GB" or nothing at all.
+
+## 15. v1.8.1 addendum — same-name replacement (implements PRD F61)
+
+In `UpdateEngine.place`, `installedName` (what is on the drive), `oldName` (what is deleted afterwards — nil when it shares `finalName`) and `replacedURL` (what may be freed beforehand — nil only when the drive keeps old versions) are three separate derivations of one file. They were one, which is why a same-named replacement reported a shortfall equal to the size of the file it was replacing.
+
+The early delete now targets `replacedURL`. Its input is always the cache or the user's Downloads folder, never the drive file, so removing it cannot take the copy's own source with it. `oldName` still drives both the post-copy delete and F35's retained pin, which is what an existing test caught when the first attempt collapsed the two.

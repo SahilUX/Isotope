@@ -227,3 +227,15 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 - **F60** **Every ISO on a drive shows what it takes up.** A stick's free space was visible; where it had gone was not. Each tracked assignment now carries its file's size on the version line ("25H2 v2 (build 26200.8037) → … · 8.47 GB"), and the two informational lists — recognised-but-untracked ISOs and unrecognised files — carry theirs too.
 
   Sizes are read during the scan that lists the folder, and held with the rest of the scan's transient output, so they cannot describe a file the drive no longer has. A folder that cannot be read yields no sizes rather than an error: a size is a nicety, and it must never be the reason a scan fails or a row shows "Zero KB".
+
+## 20. v1.8.1 addendum — replacing a file that shares its name (2026-08-27)
+
+- **F61** **The pre-flight counts the file it is about to replace, whatever it is called.** A Ventoy stick with 589 MB free, holding an 8.47 GB Windows ISO, refused to place the same media again: *"does not have room — it is 7.95 GB short, even after removing the version being replaced"*. The message named the very file whose bytes it had declined to count.
+
+  The cause was one line doing two jobs. The file being replaced plays two parts, and they are not the same file set:
+  - its bytes are **reclaimable** before the copy, whatever it is named;
+  - only a **differently named** one is deleted *after* the copy, because the rename at the end has already overwritten a file sharing the new name.
+
+  Reading the second rule into the first left a same-named replacement with nothing reclaimable and a shortfall equal to its own size. The two are now derived separately, and `requiresReclaimFirst` (F18) deletes the outgoing file before the copy in this case, exactly as it already did for a differently named one.
+
+  Unchanged, deliberately: a drive set to **keep old versions**, or an item the user asked to **keep as a pinned copy** (F6/F35), still reserves room for both — those bytes are not Isotope's to spend, so such an update still fails honestly when the stick is too full.

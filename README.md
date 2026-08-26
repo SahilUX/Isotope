@@ -35,7 +35,7 @@ Anything not in the catalog can be added as a **custom source** — four detecti
 - Every ISO is SHA-256 verified against the publisher's checksum before it touches a drive. Sources without a published checksum are labelled **unverified** rather than silently trusted.
 - Copies land under a temporary name and are renamed on completion — a half-written ISO never appears on your drive.
 - Only the specific old ISO being replaced is ever deleted; nothing else on the drive is touched.
-- Free-space pre-flight (counting the reclaimable old ISO) fails with the exact shortfall rather than running out mid-copy.
+- Free-space pre-flight counts the ISO being replaced — including one that shares the incoming file's name — and fails with the exact shortfall rather than running out mid-copy.
 - Updates **always** require explicit confirmation. Nothing is ever flashed or replaced automatically.
 - Downloaded ISOs are **deleted as soon as they are on the drive** (on by default). The cache is there to save a second download, not to keep a second copy of what you are already carrying on a stick — an image another queued drive still needs is kept until that drive has it too, and a failed copy keeps its download for the retry.
 
@@ -181,7 +181,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 184 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 187 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 
