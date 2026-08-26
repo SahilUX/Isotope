@@ -370,24 +370,27 @@ private struct AssignmentRow: View {
                 OperationBadge(operation: operation)
             } else {
                 statusLabel
-                // PRD F33: the pin is one click away on the row itself; the
-                // context menu spells both policies out.
-                Button {
-                    setPolicy(assignment.isPinned ? .trackLatest : .keepAsIs)
-                } label: {
-                    // The icon is the *action*, not the state: a pinned row
-                    // offers "unpin", an unpinned one offers "pin". The state
-                    // itself is already on the row, in `statusLabel`.
-                    Image(systemName: assignment.isPinned ? "pin.slash" : "pin.fill")
-                }
-                .buttonStyle(.borderless)
-                .disabled(assignment.isPinned && !canTrackLatest)
-                .help(pinHelp)
                 if !assignment.isPinned, showsUpdateButton {
                     Button(isManual ? "Get ISO…" : "Update") { onUpdate() }
                         .disabled(!isUpdatable)
                         .help(updateHelp)
                 }
+                // PRD F33: the pin is one click away on the row itself; the
+                // context menu spells both policies out.
+                //
+                // Last in the row, always: only some rows have an update button,
+                // and with the pin in front of it the icon landed in a different
+                // place on every row. Trailing-most puts it in one column.
+                Button {
+                    setPolicy(assignment.isPinned ? .trackLatest : .keepAsIs)
+                } label: {
+                    // The icon is the *action*, not the state: a pinned row
+                    // offers "unpin", an unpinned one offers "pin".
+                    Image(systemName: assignment.isPinned ? "pin.slash" : "pin.fill")
+                }
+                .buttonStyle(.borderless)
+                .disabled(assignment.isPinned && !canTrackLatest)
+                .help(pinHelp)
             }
         }
         .padding(.vertical, 2)
