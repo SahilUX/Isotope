@@ -58,6 +58,14 @@ struct SettingsView: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Section("Windows") {
+                // PRD F49: off by default, and the copy says why rather than
+                // implying it usually works.
+                Toggle("Try to download Windows ISOs without the browser", isOn: windowsAutoDownloadBinding)
+                Text("Microsoft's download service refuses requests that do not come from a browser, so this usually fails and Isotope falls back to opening the download page. When it does work, the ISO is checksum-verified like any other. Nothing is downloaded without your say-so either way.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             Section("Flashing") {
                 // PRD F29: read-back verification, on by default.
                 Toggle("Verify the device after flashing", isOn: flashVerificationBinding)
@@ -128,6 +136,11 @@ struct SettingsView: View {
                 Task { await downloads.setMaxConcurrent(value) }
             }
         })
+    }
+
+    private var windowsAutoDownloadBinding: Binding<Bool> {
+        Binding(get: { store.settings.attemptWindowsAutoDownload },
+                set: { store.settings.attemptWindowsAutoDownload = $0 })
     }
 
     private var discardAfterPlacementBinding: Binding<Bool> {

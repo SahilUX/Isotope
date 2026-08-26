@@ -87,7 +87,7 @@ final class WindowsReleaseTrackingTests: XCTestCase {
         for entry in try windowsEntries() {
             for channel in entry.channels {
                 guard case .windowsManual(_, _, let versionPattern, let fileNamePattern,
-                                          let buildInfoURL, let buildPattern) = channel.provider
+                                          let buildInfoURL, let buildPattern, _) = channel.provider
                 else { return XCTFail("\(entry.id) is not a windowsManual channel any more") }
                 let version = try XCTUnwrap(versionPattern, "\(entry.id) needs a version pattern")
                 let matcher = try PatternMatcher(version)

@@ -28,7 +28,7 @@ public struct WindowsInfoProvider: VersionProvider {
 
     public func fetchLatest(config: ProviderConfig) async throws -> Release {
         guard case .windowsManual(let infoURL, _, let versionPattern, _,
-                                  let buildInfoURL, let buildPattern) = config else {
+                                  let buildInfoURL, let buildPattern, let mediaCatalog) = config else {
             throw ProviderError.unsupportedForMechanism("WindowsInfoProvider was given a \(config.mechanism.rawValue) config.")
         }
         let response = try await http.requireData(from: infoURL, headers: Self.headers)
@@ -45,10 +45,32 @@ public struct WindowsInfoProvider: VersionProvider {
             throw ProviderError.noMatch(pattern: pattern, source: infoURL,
                                         snippet: ProviderError.snippet(text))
         }
+        // PRD F48: what Microsoft is *serving* beats what the page prose says —
+        // it names the same release and adds the media revision. Best-effort:
+        // a refusal or a format change leaves the scraped release standing.
+        let media = await mediaIdentity(catalog: mediaCatalog)
+        let version = media?.release ?? best.version
+
         // fileName stays empty and isoURL nil: the download is manual (PRD §5.4).
-        return Release(version: best.version, isoURL: nil, fileName: "", sha256: nil, sizeBytes: nil,
+        return Release(version: version, isoURL: nil, fileName: "", sha256: nil, sizeBytes: nil,
                        build: await build(url: buildInfoURL, pattern: buildPattern,
-                                          version: best.version.raw))
+                                          version: version.raw),
+                       mediaRevision: media?.revision)
+    }
+
+    /// PRD F48: the release and media revision Microsoft's download connector
+    /// reports for this product edition. One plain GET with a fresh session id —
+    /// no fingerprint call, no login, and nothing that mints a download link
+    /// (that sibling endpoint refuses everything that is not a browser).
+    ///
+    /// Entirely best-effort, like the build lookup: every failure returns nil
+    /// and the caller keeps the release it scraped from the page.
+    private func mediaIdentity(catalog: WindowsMediaCatalog?) async -> (release: VersionToken, revision: Int)? {
+        guard let catalog,
+              let url = catalog.requestURL(sessionID: UUID().uuidString.lowercased()),
+              let response = try? await http.requireData(from: url, headers: Self.headers)
+        else { return nil }
+        return catalog.identity(inSKUResponse: response.body)
     }
 
     /// PRD F43: the OS build number for the resolved feature release — shown

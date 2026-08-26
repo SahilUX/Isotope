@@ -283,7 +283,7 @@ enum MechanismCopy {
             return "Page scrape · \(host(index?.url ?? url))"
         case .jsonFeed(let url, _, _):
             return "Release feed · \(host(url))"
-        case .windowsManual(let infoURL, _, _, _, _, _):
+        case .windowsManual(let infoURL, _, _, _, _, _, _):
             return "Manual download · \(host(infoURL))"
         }
     }

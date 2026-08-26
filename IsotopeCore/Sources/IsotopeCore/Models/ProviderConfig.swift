@@ -69,9 +69,16 @@ public enum ProviderConfig: Codable, Hashable, Sendable {
     /// pattern is replaced by the resolved release token so the build belonging
     /// to *that* release is the one picked up. Any failure — network, no match,
     /// pattern drift — is swallowed and simply leaves the detail off.
+    ///
+    /// `mediaCatalog` (PRD F48) is the one Microsoft endpoint that answers
+    /// without a browser: it names the release *and the media revision* being
+    /// served right now ("Windows 11 25H2__V2"). When present it supersedes the
+    /// page scrape for the release token and adds the revision, which is the
+    /// only Windows difference the user can actually act on.
     case windowsManual(infoURL: URL, downloadPage: URL, versionPattern: String? = nil,
                        fileNamePattern: String? = nil,
-                       buildInfoURL: URL? = nil, buildPattern: String? = nil)
+                       buildInfoURL: URL? = nil, buildPattern: String? = nil,
+                       mediaCatalog: WindowsMediaCatalog? = nil)
 
     public enum Mechanism: String, Codable, CaseIterable, Sendable {
         case checksumFile, gitHubReleases, staticURL, pageScrape, jsonFeed, windowsManual
@@ -93,6 +100,7 @@ public enum ProviderConfig: Codable, Hashable, Sendable {
         case linkPattern, checksumSuffix, infoURL, downloadPage, versionPattern, fileNamePattern
         case buildInfoURL, buildPattern
         case itemsPath, filter, versionKeys, isoURLKey, sha256Key, sizeKey, fileNameKey
+        case mediaCatalog
     }
 
     public init(from decoder: Decoder) throws {
@@ -125,7 +133,8 @@ public enum ProviderConfig: Codable, Hashable, Sendable {
                                   versionPattern: try c.decodeIfPresent(String.self, forKey: .versionPattern),
                                   fileNamePattern: try c.decodeIfPresent(String.self, forKey: .fileNamePattern),
                                   buildInfoURL: try c.decodeIfPresent(URL.self, forKey: .buildInfoURL),
-                                  buildPattern: try c.decodeIfPresent(String.self, forKey: .buildPattern))
+                                  buildPattern: try c.decodeIfPresent(String.self, forKey: .buildPattern),
+                                  mediaCatalog: try c.decodeIfPresent(WindowsMediaCatalog.self, forKey: .mediaCatalog))
         }
     }
 
@@ -155,13 +164,14 @@ public enum ProviderConfig: Codable, Hashable, Sendable {
             try c.encodeIfPresent(fileNamePattern, forKey: .fileNamePattern)
             try spec.encode(to: encoder)
         case .windowsManual(let infoURL, let downloadPage, let versionPattern, let fileNamePattern,
-                            let buildInfoURL, let buildPattern):
+                            let buildInfoURL, let buildPattern, let mediaCatalog):
             try c.encode(infoURL, forKey: .infoURL)
             try c.encode(downloadPage, forKey: .downloadPage)
             try c.encodeIfPresent(versionPattern, forKey: .versionPattern)
             try c.encodeIfPresent(fileNamePattern, forKey: .fileNamePattern)
             try c.encodeIfPresent(buildInfoURL, forKey: .buildInfoURL)
             try c.encodeIfPresent(buildPattern, forKey: .buildPattern)
+            try c.encodeIfPresent(mediaCatalog, forKey: .mediaCatalog)
         }
     }
 }

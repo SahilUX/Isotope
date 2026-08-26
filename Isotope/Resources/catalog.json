@@ -2120,7 +2120,13 @@
           "versionPattern": "\\bVersion (\\d{2}H\\d)\\b",
           "fileNamePattern": "^Win11(?:_(\\d{2}H\\d)|_\\d{4})?_[A-Za-z]+(?:[ _-][A-Za-z]+)*_(?:x64|x32|x86|arm64)(?:_?v\\d+)?\\.iso$",
           "buildInfoURL": "https://learn.microsoft.com/en-us/windows/release-health/windows11-release-information",
-          "buildPattern": ">{version}<[\\s\\S]{0,3000}?\\b(\\d{5}\\.\\d{1,5})\\b"
+          "buildPattern": ">{version}<[\\s\\S]{0,3000}?\\b(\\d{5}\\.\\d{1,5})\\b",
+          "mediaCatalog": {
+            "url": "https://www.microsoft.com/software-download-connector/api",
+            "productEditionID": "3321",
+            "language": "English",
+            "profile": "606624d44113"
+          }
         }
       }
     ]
@@ -2143,7 +2149,13 @@
           "versionPattern": "\\bVersion (\\d{2}H\\d)\\b",
           "fileNamePattern": "^Win10(?:_(\\d{2}H\\d)|_\\d{4})?_[A-Za-z]+(?:[ _-][A-Za-z]+)*_(?:x64|x32|x86|arm64)(?:_?v\\d+)?\\.iso$",
           "buildInfoURL": "https://learn.microsoft.com/en-us/windows/release-health/release-information",
-          "buildPattern": ">{version}<[\\s\\S]{0,3000}?\\b(\\d{5}\\.\\d{1,5})\\b"
+          "buildPattern": ">{version}<[\\s\\S]{0,3000}?\\b(\\d{5}\\.\\d{1,5})\\b",
+          "mediaCatalog": {
+            "url": "https://www.microsoft.com/software-download-connector/api",
+            "productEditionID": "2618",
+            "language": "English",
+            "profile": "606624d44113"
+          }
         }
       }
     ]

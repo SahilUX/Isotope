@@ -49,6 +49,15 @@ public extension Staleness {
         let base = evaluate(installedVersion: installed?.version,
                             hasInstalledFile: installed != nil,
                             latest: latest?.version)
+        // PRD F48: Microsoft reissues the media for a release without changing
+        // the release. Unlike a servicing build, a new issue *is* downloadable
+        // today, so it is a plain update — the row says 25H2 → 25H2 v2 and the
+        // usual "get this" flow applies.
+        if base == .upToDate, let installed, let latestRevision = latest?.mediaRevision,
+           let installedRevision = WindowsMediaName.revision(fromFileName: installed.fileName),
+           installedRevision < latestRevision {
+            return .stale
+        }
         // PRD F43 addendum: only once the releases are level does the build
         // become the finer question. Both sides must have one, read from
         // like-for-like sources — the image's own metadata against the
@@ -102,7 +111,7 @@ public extension ProviderConfig {
         case .checksumFile(_, let filePattern, _, _): return filePattern
         case .pageScrape(_, let linkPattern, _, _): return linkPattern
         case .gitHubReleases(_, let assetPattern): return assetPattern
-        case .windowsManual(_, _, _, let fileNamePattern, _, _): return fileNamePattern
+        case .windowsManual(_, _, _, let fileNamePattern, _, _, _): return fileNamePattern
         case .staticURL(_, _, let fileNamePattern): return fileNamePattern
         case .jsonFeed(_, _, let fileNamePattern): return fileNamePattern
         }

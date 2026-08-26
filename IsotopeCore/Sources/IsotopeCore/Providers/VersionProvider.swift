@@ -10,8 +10,15 @@ public protocol VersionProvider: Sendable {
 public struct VersionResolver: VersionProvider {
     public let http: HTTPClient
 
-    public init(http: HTTPClient = URLSessionHTTPClient()) {
-        self.http = http
+    /// PRD F50: the client is wrapped so a check that fans out across 100+
+    /// channels issues one request per URL, not one per channel. Several
+    /// channels legitimately share a URL — an index file, a `SHA256SUMS`, a
+    /// release feed — and the duplicate requests are what earn a 429.
+    ///
+    /// `coalescing: false` hands the client through untouched, which is what
+    /// the tests that count requests want.
+    public init(http: HTTPClient = URLSessionHTTPClient(), coalescing: Bool = true) {
+        self.http = coalescing ? CoalescingHTTPClient(wrapping: http) : http
     }
 
     public func provider(for config: ProviderConfig) -> VersionProvider {

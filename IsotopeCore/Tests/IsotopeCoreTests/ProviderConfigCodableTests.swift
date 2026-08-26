@@ -123,7 +123,7 @@ final class ProviderConfigCodableTests: XCTestCase {
                     if let index { XCTAssertNoThrow(try PatternMatcher(index.pattern)) }
                 case .gitHubReleases(_, let pattern):
                     XCTAssertNoThrow(try PatternMatcher(pattern))
-                case .windowsManual(_, _, let versionPattern, let fileNamePattern, _, let buildPattern):
+                case .windowsManual(_, _, let versionPattern, let fileNamePattern, _, let buildPattern, _):
                     if let versionPattern { XCTAssertNoThrow(try PatternMatcher(versionPattern)) }
                     if let fileNamePattern { XCTAssertNoThrow(try PatternMatcher(fileNamePattern)) }
                     // PRD F43: `{version}` is substituted before compiling, so

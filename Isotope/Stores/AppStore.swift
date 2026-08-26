@@ -63,6 +63,10 @@ final class AppStore {
     /// drives without a real USB stick.
     var driveProbe: DriveProbe = .live
 
+    /// PRD F49: the opt-in "ask Microsoft for a link" attempt. Injectable so
+    /// tests can exercise both answers without touching the network.
+    var windowsResolver: WindowsDownloadResolving = WindowsDownloadResolver()
+
     var selection: SidebarSelection? = .drives
 
     /// PRD F12: default 6 h while the app runs; configurable in Settings.

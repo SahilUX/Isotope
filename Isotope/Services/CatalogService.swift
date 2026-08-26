@@ -24,8 +24,17 @@ actor CatalogService {
     }
 
     /// Checks every channel of every entry. `report` is called once per channel.
+    ///
+    /// PRD F50: the sweep starts by forgetting anything the coalescing client
+    /// remembered, so "Check Now" always means the network. Within the sweep it
+    /// still collapses the URLs that several channels share — one request for
+    /// Ubuntu's meta-release, not twenty-four.
     func check(entries: [CatalogEntry],
                report: @escaping @Sendable (ReleaseKey, Outcome) async -> Void) async {
+        if let resolver = resolver as? VersionResolver,
+           let coalescing = resolver.http as? CoalescingHTTPClient {
+            await coalescing.reset()
+        }
         let jobs: [(ReleaseKey, ProviderConfig)] = entries.flatMap { entry in
             entry.channels.map { (ReleaseKey(entryID: entry.id, channelID: $0.id), $0.provider) }
         }

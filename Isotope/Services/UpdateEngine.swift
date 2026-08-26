@@ -112,6 +112,10 @@ actor UpdateEngine {
     /// batch is going to want the identical file, which is exactly what
     /// "Update All" across two sticks holding the same distro produces.
     private var queuedCacheKeys: [String: Int] = [:]
+    /// Requests that have already given up their claim on a cache key, so the
+    /// bookkeeping stays right whether the operation ended in a placement or a
+    /// failure.
+    private var releasedRequests: Set<UUID> = []
 
     var copyChunkSize = ChunkedCopy.defaultChunkSize
 
@@ -128,9 +132,15 @@ actor UpdateEngine {
     /// PRD F17: called only after the user confirmed. "Update All" passes the
     /// whole batch at once.
     func enqueue(_ requests: [UpdateRequest]) async {
+        // PRD F47: every claim on a cached ISO is registered before any work
+        // starts. Counting them as each operation is queued would let the first
+        // one finish — `beginOperation` suspends — while the second is still
+        // uncounted, and delete the file that second one was about to copy.
+        for request in requests where Self.cacheKey(for: request) != nil {
+            queuedCacheKeys[Self.cacheKey(for: request)!, default: 0] += 1
+        }
         for request in requests {
             cancellations[request.id] = CancellationFlag()
-            if let key = Self.cacheKey(for: request) { queuedCacheKeys[key, default: 0] += 1 }
             await store.beginOperation(for: request)
             let previous = chains[request.driveID]
             chains[request.driveID] = Task { [weak self] in
@@ -195,7 +205,10 @@ actor UpdateEngine {
         defer {
             cancellations[request.id] = nil
             cacheKeys[request.id] = nil
-            if let key = Self.cacheKey(for: request) { releaseQueued(key) }
+            // Safety net: an operation that never reached the placement still
+            // has to stop counting against the ISO it was going to want.
+            releaseClaim(of: request)
+            releasedRequests.remove(request.id)
         }
         if cancellations[request.id]?.isSet == true {
             await store.finishOperation(request: request, result: .failure(.cancelled))
@@ -290,7 +303,7 @@ actor UpdateEngine {
                                          volume: volume, finalName: finalName)
             // PRD F47: it is on the drive now. Unless the user turned it off, or
             // something else still needs this exact file, the cached copy goes.
-            let discard = await shouldDiscard(cacheKey: local.cacheKey)
+            let discard = await shouldDiscard(cacheKey: local.cacheKey, request: request)
             let freed = await downloads.endUse(cacheKey: local.cacheKey, discard: discard)
             var result = placed
             result.reclaimedCacheBytes = freed
@@ -305,15 +318,35 @@ actor UpdateEngine {
 
     /// True when the placed ISO should be deleted from the cache now: the
     /// setting is on, and no other queued operation is waiting for the same file.
-    private func shouldDiscard(cacheKey: String) async -> Bool {
-        guard !cacheKey.isEmpty, await store.discardsCacheAfterPlacement else { return false }
-        // This operation's own entry is still counted, hence "> 1".
-        return (queuedCacheKeys[cacheKey] ?? 0) <= 1
+    ///
+    /// This request gives up its own claim *first*, then asks whether anything
+    /// is left. Deciding before releasing would let two drives copying the same
+    /// ISO concurrently each see the other's claim and neither delete — the
+    /// order is what makes the outcome independent of how they interleave.
+    private func shouldDiscard(cacheKey: String, request: UpdateRequest) async -> Bool {
+        // The setting is read *first*, before the claim is given up: awaiting the
+        // main actor in between would suspend this operation mid-decision, and
+        // two drives finishing the same ISO could both release, both resume, and
+        // both conclude they were last. Release and check must happen in one
+        // uninterrupted run of the actor.
+        let wanted = await store.discardsCacheAfterPlacement
+        releaseClaim(of: request)
+        guard wanted, !cacheKey.isEmpty else { return false }
+        return queuedCacheKeys[cacheKey] == nil
     }
 
-    private func releaseQueued(_ key: String) {
-        guard let count = queuedCacheKeys[key] else { return }
-        if count <= 1 { queuedCacheKeys[key] = nil } else { queuedCacheKeys[key] = count - 1 }
+    /// Drops one request's claim on its cache key. Idempotent: it runs at the
+    /// end of a placement and again from `perform`'s defer, and must not
+    /// double-count either way.
+    private func releaseClaim(of request: UpdateRequest) {
+        guard !releasedRequests.contains(request.id),
+              let key = Self.cacheKey(for: request) else { return }
+        releasedRequests.insert(request.id)
+        if let count = queuedCacheKeys[key], count > 1 {
+            queuedCacheKeys[key] = count - 1
+        } else {
+            queuedCacheKeys[key] = nil
+        }
     }
 
     /// The cache key an update will use, known before it starts running.

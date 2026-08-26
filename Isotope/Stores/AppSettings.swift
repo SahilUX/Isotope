@@ -23,6 +23,20 @@ struct AppSettings: @unchecked Sendable {
         static let autoResumeDownloads = "autoResumeDownloads"
         static let flashVerification = "flashVerification"
         static let discardAfterPlacement = "discardCachedISOAfterPlacement"
+        static let windowsAutoDownload = "attemptWindowsAutoDownload"
+    }
+
+    /// PRD F49: try to fetch a Windows ISO without the browser before falling
+    /// back to the hand-off sheet. **Off by default, and deliberately so.**
+    ///
+    /// Microsoft's link-minting endpoint answers "Sentinel marked this request
+    /// as rejected" to anything that does not look like a browser session — it
+    /// refused a correctly sequenced request from an ordinary connection during
+    /// development. On, Isotope tries anyway and says plainly when it is
+    /// refused; the manual flow is right there either way.
+    var attemptWindowsAutoDownload: Bool {
+        get { defaults.object(forKey: Key.windowsAutoDownload) as? Bool ?? false }
+        nonmutating set { defaults.set(newValue, forKey: Key.windowsAutoDownload) }
     }
 
     /// PRD F47: delete a downloaded ISO from the cache the moment it has been

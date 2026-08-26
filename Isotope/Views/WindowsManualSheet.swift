@@ -15,6 +15,18 @@ struct WindowsManualSheet: View {
     @State private var hash: String?
     @State private var isHashing = false
     @State private var hashError: String?
+    /// PRD F49: where the opt-in "ask Microsoft directly" attempt has got to.
+    @State private var attempt: AutoAttempt = .notTried
+
+    /// The attempt has exactly three honest outcomes, and the sheet says which.
+    private enum AutoAttempt: Equatable {
+        case notTried
+        case trying
+        /// Microsoft answered with a link; the normal pipeline has it now.
+        case started(String)
+        /// Refused, or nothing usable came back. The manual steps below stand.
+        case refused
+    }
 
     let item: UpdatePlanItem
     let downloadPage: URL?
@@ -25,6 +37,7 @@ struct WindowsManualSheet: View {
             Divider()
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
+                    autoAttemptSection
                     steps
                     Divider()
                     foundSection
@@ -52,6 +65,7 @@ struct WindowsManualSheet: View {
         .onAppear {
             watcher.pattern = Self.pattern(for: item)
             watcher.start()
+            tryAutomaticDownload()
         }
         .onDisappear { watcher.stop() }
     }
@@ -64,6 +78,36 @@ struct WindowsManualSheet: View {
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)
+    }
+
+    /// PRD F49. Shown only when the user turned the attempt on: it is off by
+    /// default because Microsoft refuses it far more often than not, and a
+    /// permanently failing spinner would be worse than no attempt at all.
+    @ViewBuilder
+    private var autoAttemptSection: some View {
+        switch attempt {
+        case .notTried:
+            EmptyView()
+        case .trying:
+            HStack(spacing: 8) {
+                ProgressView().controlSize(.small)
+                Text("Asking Microsoft for a direct download link…").font(.callout)
+            }
+        case .started(let fileName):
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Microsoft answered — downloading “\(fileName)”", systemImage: "checkmark.circle.fill")
+                    .font(.callout).foregroundStyle(.green)
+                Text("It is being downloaded, checksum-verified and placed on “\(item.driveName)” like any other ISO. You can close this window; progress is in Activity.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .refused:
+            VStack(alignment: .leading, spacing: 4) {
+                Label("Microsoft refused the automated request", systemImage: "hand.raised.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                Text("Their download service rejects clients that are not a browser, which is why this stays a manual step. Carry on below — it is three clicks.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        }
     }
 
     private var steps: some View {
@@ -150,6 +194,22 @@ struct WindowsManualSheet: View {
                 .disabled(selected == nil || isHashing)
         }
         .padding(16)
+    }
+
+    /// PRD F49: try the direct link before falling back to the hand-off. The
+    /// store returns nil when the setting is off, so this is a no-op for
+    /// everyone who never turned it on.
+    private func tryAutomaticDownload() {
+        guard store.settings.attemptWindowsAutoDownload, attempt == .notTried else { return }
+        attempt = .trying
+        Task {
+            guard let resolved = await store.resolveWindowsDownload(for: item) else {
+                attempt = .refused
+                return
+            }
+            store.startResolvedWindowsDownload(resolved, for: item)
+            attempt = .started(resolved.fileName)
+        }
     }
 
     /// PRD §5.4 alternative to the pattern watch: pick the downloaded ISO

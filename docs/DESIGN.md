@@ -248,3 +248,19 @@ Refusals are structural, not stylistic: a non-WIM magic, a compressed XML resour
 - **`AppSettings.discardAfterPlacement`** defaults to `true`; `AppStore.discardsCacheAfterPlacement` exposes it to the two actors, which cannot touch the `@MainActor` store's properties directly.
 
 `PlacedISO.reclaimedCacheBytes` carries the freed size back to the store for the history line, so the deletion is reported rather than merely done.
+
+## 12. v1.7 addendum — media revisions and request coalescing (implements PRD F48–F50)
+
+### Core
+- **`WindowsMediaName`** — the release/revision pair out of a `ProductDisplayName` (`Windows 11 25H2__V2`, `Windows 10 22H2_v1` — the separator differs by product) and the revision out of a filename (`…_x64v2.iso` → 2, no suffix → 1, anything not Microsoft-shaped → nil). The release pattern deliberately uses a lookbehind rather than `\b`: an underscore is a word character, so `\b` would refuse to match `25H2__V2` at all.
+- **`WindowsMediaCatalog`** — `url`, `productEditionID` (3321 / 2618, renumbered every feature release, hence data), `language`, `profile`. Builds the request and reads the SKU response. Attached to `ProviderConfig.windowsManual` as `mediaCatalog`.
+- **`Release.mediaRevision`**, `Release.displayRelease` ("25H2 v2"), `InstalledISO.mediaRevision` derived from the filename. `Staleness` compares revisions only after the releases come out level, and returns `.stale` — the build check that follows still yields `.buildBehind`.
+- **`CoalescingHTTPClient`** — actor wrapping any `HTTPClient`; in-flight coalescing plus a 120 s success-only memory, keyed by (method, URL, headers). `VersionResolver(http:coalescing:)` wraps by default; provider tests that count requests pass `coalescing: false`.
+
+### App
+- **`WindowsDownloadResolver`** — the F49 attempt: session registration, SKU lookup, link request. The response is mined for an `https://…​.iso` value and a 64-hex sibling **by shape, not by key name**, because Microsoft has renamed those fields more than once and a hard-coded key fails silently the day it changes. A rejection payload contains neither and falls out as nil with no special-casing.
+- **`AppStore.resolveWindowsDownload(for:)` / `startResolvedWindowsDownload(_:for:)`** — patches the resolved URL/name/checksum into the release and enqueues an ordinary update; nothing downstream is special-cased. `WindowsManualSheet` runs the attempt on appear and shows one of three states.
+- **`AppSettings.attemptWindowsAutoDownload`** (default false); `CatalogService.check` resets the coalescing memory before a sweep.
+
+### A concurrency note worth keeping
+`UpdateEngine.shouldDiscard` (F47) reads the setting *before* releasing the operation's claim on a cache key. Awaiting the main actor between the release and the check let two drives finishing the same ISO both release, both resume, and both conclude they were last — deleting a file the other still wanted. Claims are also registered for the whole batch up front, because `beginOperation` suspends and the first operation could otherwise finish before the second was counted. Both were caught by a test that failed one run in three; the fix is ordering, not retries.

@@ -174,3 +174,17 @@ Both address the same complaint: the app knows less than the drive does.
   - **The operation failed.** A failed copy or flash keeps the download, so a retry does not mean fetching several gigabytes again.
 
   Turning the setting off restores the F20 behaviour exactly: ISOs stay cached up to the limit. The reclaimed size is written into the history line ("…· freed 5.7 GB of cache") so the space going away is visible rather than mysterious. The Windows manual path is untouched — that file lives in the user's Downloads folder and is theirs, not Isotope's, to delete.
+
+## 15. v1.7 addendum — Windows media revisions, an opt-in download attempt (2026-08-26)
+
+Asked directly: can Windows be handled like Linux, without the manual download? The endpoints were tested against the live service before answering, and the answer is "partly, and here is exactly which part".
+
+- **F48** **Track the media revision.** Microsoft reissues the media for a feature release without changing the release: 25H2 has shipped as the original ISO and again as `25H2__V2`. Their download connector answers `getskuinformationbyproductedition` to *any* client — no login, no fingerprint, one plain GET — with a `ProductDisplayName` naming both. Their own filenames carry the same thing (`Win11_25H2_English_x64v2.iso`, the original having no suffix), so both sides of the comparison have it.
+
+  A newer revision is therefore a **plain update** (`.stale`), not the advisory F46 introduced: unlike a servicing build, a reissue is genuinely downloadable today. Precedence, highest first: feature release → media revision → servicing build. Where the file is not named the way Microsoft names its media, no revision is claimed, and nothing is inferred.
+
+- **F49** **Opt-in automatic download, honest about its odds.** The sibling call that mints a real download link (`GetProductDownloadLinksBySku`) is guarded: it answers `"Sentinel marked this request as rejected"` to anything that does not look like a browser session. That is measured, not assumed — it refused a correctly sequenced, correctly headed request from an ordinary residential connection, twice, during development.
+
+  So Isotope can *try*, behind a setting that is **off by default**. On, the hand-off sheet attempts the resolve and says which of the two things happened: "Microsoft answered — downloading …" or "Microsoft refused the automated request", with the manual steps right there underneath. A link that does come back carries its SHA-256, so a resolved download is verified like any other; the manual path is unchanged and remains the supported one.
+
+- **F50** **One request per URL per check.** The catalog now has 106 channels and many of them legitimately share a URL — 24 Ubuntu-family channels behind two `changelogs.ubuntu.com` index files, 16 Fedora channels behind one `releases.json`, Kali's five images and Debian Live's six each behind a single `SHA256SUMS`. Fanning out one request per *channel* earned an HTTP 429 and reported six Ubuntu flavours as failing when nothing was wrong with them. Requests are now coalesced per (method, URL, headers) — in-flight requests join, successful answers are reused for 120 s, failures never are — and a user-initiated check clears that memory first.

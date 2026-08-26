@@ -181,7 +181,15 @@ public struct InstalledISO: Codable, Hashable, Sendable {
     /// formatted by the same rule.
     public var displayVersion: String {
         guard let version = version?.raw else { return fileName }
-        guard let build, !build.isEmpty else { return version }
-        return "\(version) (build \(build))"
+        // PRD F48: "25H2 v2" where the media names its issue; plain "25H2" for
+        // the original, which Microsoft writes without a suffix.
+        let release = WindowsMediaName.displaySuffix(revision: mediaRevision)
+            .map { "\(version) \($0)" } ?? version
+        guard let build, !build.isEmpty else { return release }
+        return "\(release) (build \(build))"
     }
+
+    /// PRD F48: the media issue this file claims by its name, or nil for
+    /// anything that is not Microsoft's own media naming.
+    public var mediaRevision: Int? { WindowsMediaName.revision(fromFileName: fileName) }
 }

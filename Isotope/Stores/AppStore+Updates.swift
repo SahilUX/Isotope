@@ -232,8 +232,45 @@ extension AppStore {
     /// The vendor page a manual entry sends the user to.
     func manualDownloadPage(entryID: String, channelID: String) -> URL? {
         guard let provider = entry(id: entryID)?.channel(id: channelID)?.provider else { return nil }
-        if case .windowsManual(_, let downloadPage, _, _, _, _) = provider { return downloadPage }
+        if case .windowsManual(_, let downloadPage, _, _, _, _, _) = provider { return downloadPage }
         return entry(id: entryID)?.homepage
+    }
+
+    /// PRD F48/F49: the download-connector configuration for a Windows channel.
+    func windowsMediaCatalog(entryID: String, channelID: String) -> WindowsMediaCatalog? {
+        guard let provider = entry(id: entryID)?.channel(id: channelID)?.provider,
+              case .windowsManual(_, _, _, _, _, _, let catalog) = provider else { return nil }
+        return catalog
+    }
+
+    /// PRD F49: try to resolve a real download link for a Windows item.
+    ///
+    /// Nil covers every "no": the setting is off, the entry has no connector
+    /// configuration, or — the usual case — Microsoft refused. The caller falls
+    /// back to the browser hand-off, which is the supported path and always was.
+    func resolveWindowsDownload(for item: UpdatePlanItem) async -> WindowsResolvedDownload? {
+        guard settings.attemptWindowsAutoDownload,
+              let catalog = windowsMediaCatalog(entryID: item.entryID, channelID: item.channelID),
+              let referer = manualDownloadPage(entryID: item.entryID, channelID: item.channelID)
+        else { return nil }
+        return await windowsResolver.resolve(catalog: catalog, referer: referer)
+    }
+
+    /// PRD F49: hand a resolved Windows link to the ordinary pipeline —
+    /// download, verify against the checksum Microsoft returned with it, place.
+    /// From here on nothing about it is special-cased.
+    func startResolvedWindowsDownload(_ resolved: WindowsResolvedDownload, for item: UpdatePlanItem) {
+        guard let engine = updateEngine else { return }
+        var release = item.release
+        release.isoURL = resolved.url
+        release.fileName = resolved.fileName
+        release.sha256 = resolved.sha256
+        let request = UpdateRequest(driveID: item.driveID, driveName: item.driveName,
+                                    assignmentID: item.id, entryID: item.entryID,
+                                    channelID: item.channelID, title: item.title,
+                                    release: release,
+                                    keepReplacedAsPinned: item.keepReplacedAsPinned)
+        Task { await engine.enqueue([request]) }
     }
 
     func cancelOperation(id: UUID) {

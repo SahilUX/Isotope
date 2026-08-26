@@ -17,9 +17,19 @@ public struct Release: Codable, Hashable, Sendable {
     /// What it is compared against is the build read out of the installed image
     /// itself (`InstalledISO.build`), which is the only like-for-like there is.
     public var build: String?
+    /// PRD F48: which issue of the release Microsoft is serving — 2 for
+    /// "25H2__V2", 1 for the original media. Unlike `build`, this one *is*
+    /// actionable: a new revision means a new ISO exists on the download page.
+    public var mediaRevision: Int?
 
     /// PRD F21: no published checksum → the UI must label the download unverified.
     public var isVerifiable: Bool { sha256?.isEmpty == false }
+
+    /// "25H2 v2", or plain "25H2" for the original issue of a release.
+    public var displayRelease: String {
+        guard let suffix = WindowsMediaName.displaySuffix(revision: mediaRevision) else { return version.raw }
+        return "\(version.raw) \(suffix)"
+    }
 
     /// "build 26200.9168" — the build as it is shown beside the version.
     public var displayDetail: String? {
@@ -29,13 +39,13 @@ public struct Release: Codable, Hashable, Sendable {
 
     /// "25H2 (build 26200.9168)", or just "24.04.4" when there is no detail.
     public var displayVersion: String {
-        guard let displayDetail else { return version.raw }
-        return "\(version.raw) (\(displayDetail))"
+        guard let displayDetail else { return displayRelease }
+        return "\(displayRelease) (\(displayDetail))"
     }
 
     public init(version: VersionToken, isoURL: URL? = nil, fileName: String,
                 sha256: String? = nil, sizeBytes: Int64? = nil, checkedAt: Date = Date(),
-                build: String? = nil) {
+                build: String? = nil, mediaRevision: Int? = nil) {
         self.version = version
         self.isoURL = isoURL
         self.fileName = fileName
@@ -43,6 +53,7 @@ public struct Release: Codable, Hashable, Sendable {
         self.sizeBytes = sizeBytes
         self.checkedAt = checkedAt
         self.build = build
+        self.mediaRevision = mediaRevision
     }
 }
 

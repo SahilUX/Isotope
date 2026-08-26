@@ -24,7 +24,7 @@ Requires macOS 14 or later. Universal binary (Apple Silicon + Intel). No third-p
 | **Independents** | openSUSE Leap, openSUSE Tumbleweed, NixOS (graphical + minimal), Alpine (standard, extended, virt), Void Linux (glibc + musl), Gentoo (minimal + LiveGUI), Qubes OS |
 | **BSD & storage** | FreeBSD (disc1 + DVD), GhostBSD, TrueNAS |
 | **Tools & rescue** | SystemRescue, GParted Live, Clonezilla Live, Memtest86+, Tails |
-| **Microsoft** | Windows 11, Windows 10 (tracked by feature release *and* exact build — see below; download is browser-assisted) |
+| **Microsoft** | Windows 11, Windows 10 (tracked by feature release, media revision *and* exact build — see below; download is browser-assisted) |
 
 An entry ships only when its version can be resolved from a stable machine-readable source **and** the publisher publishes a SHA-256 Isotope can parse. That rule is why some popular distributions are missing: EndeavourOS and ShredOS publish SHA-512/SHA-1 only, Zorin OS and elementary OS put their downloads behind scripts rather than links, Devuan and Deepin ship no parsable sums file, XCP-ng publishes no checksums beside its ISOs. Each of those is one `catalog.json` entry away the moment that changes.
 
@@ -42,7 +42,7 @@ Anything not in the catalog can be added as a **custom source** — four detecti
 **Handles the awkward cases honestly:**
 
 - **Windows** ISOs can't be hotlinked (Microsoft's links are session-generated), so Isotope tracks the current feature release, opens the official download page, then verifies and places the file you downloaded.
-- **Windows builds** are read out of the image, not guessed from its name. `Win11_25H2_English_x64.iso` is the name Microsoft gives every 25H2 ISO, refreshed media included, so Isotope mounts the image read-only and reads the `<BUILD>`/`<SPBUILD>` pair out of `sources/install.wim`. Rows then read *25H2 (build 26200.6584) → 25H2 (build 26200.9168)* instead of *25H2 → 25H2*.
+- **Windows media** is identified by more than its name: Isotope asks Microsoft which revision of a release is currently being served, and reads the exact build out of the image itself. Rows read *25H2 (build 26200.6584) → 25H2 v2 (build 26200.9168)* instead of *25H2 → 25H2*.
 - **Memtest86+** ships only a zipped ISO upstream; Isotope unzips it before placing.
 - Where a version genuinely can't be determined, the app says "unknown" instead of guessing.
 
@@ -77,18 +77,25 @@ Because of this, **one Ventoy drive can hold several versions of the same OS**: 
 
 ---
 
-## Windows: release *and* build
+## Windows: release, revision, build
 
-Windows is the one entry where the filename does not identify the file. Microsoft names every 25H2 ISO `Win11_25H2_English_x64.iso` and reissues it under that same name, so two sticks with identical filenames can hold months of difference.
+Windows is the one entry where the filename does not identify the file. Microsoft names every 25H2 ISO `Win11_25H2_English_x64.iso`, and reissues it under almost that same name, so two sticks with near-identical filenames can hold months of difference.
 
-Isotope reads the truth out of the image: it mounts the ISO read-only (no administrator rights, no writes) and reads the build recorded in `sources/install.wim`. Two versions then appear side by side:
+Isotope pins it down with three things, in order of how much they matter:
 
-- **Feature release** — 25H2, 24H2, 22H2. This is what staleness compares, because it is the identity that means something across media.
-- **Build** — 26200.6584. Shown on both sides, compared only once the releases match.
+- **Feature release** — 25H2, 24H2, 22H2. The identity that means something across media, and the first thing compared.
+- **Media revision** — Microsoft reissues a release as `25H2__V2`, and their filenames say so (`…_x64v2.iso`, the original having no suffix). Isotope asks Microsoft's download connector what it is serving right now — one plain GET, no login — and compares it against what your ISO's name claims. **A newer revision is a real update**, because unlike a build, it can actually be downloaded today.
+- **Build** — 26200.6584, read out of `sources/install.wim` by mounting the ISO read-only (no administrator rights, no writes). Compared only once release and revision match, and shown as **"Newer build shipped"** rather than an update: Microsoft services Windows monthly but reissues the ISO rarely, so prompting would send you to fetch the file you already have.
 
-When the drive holds the current release at an older build, the row says **“Newer build shipped”** and is *not* counted as an update. That is deliberate: Microsoft services Windows monthly but refreshes the downloadable ISO rarely, so a newer build usually cannot be downloaded — prompting for it would send you to fetch the file you already have. The information is there; the decision is yours.
+A row therefore reads *25H2 (build 26200.6584) → 25H2 v2 (build 26200.9168)*, and you can tell at a glance which part of that you can do something about. An image that will not identify itself simply shows less; nothing is inferred from a filename Microsoft did not write.
 
-An image that will not identify itself (an unusual container, a custom ISO) simply shows no build. Nothing is inferred from the filename.
+### Can it download Windows automatically?
+
+Partly, and the honest answer is worth stating plainly. Microsoft's download service has two relevant endpoints. The one that reports **what is being served** answers anybody — that is what the revision tracking above uses. The one that **mints a download link** is behind an anti-automation check that replies `"Sentinel marked this request as rejected"` to anything that is not a browser session; it refused correctly-formed requests from an ordinary home connection during development, which is why Rufus's Fido script fails for so many people too.
+
+So there is a setting — **Try to download Windows ISOs without the browser**, off by default — that attempts it anyway and tells you which of the two things happened. When Microsoft answers, the link comes with its SHA-256 and the ISO is downloaded, verified and placed like any other. When it refuses, the sheet says so and the normal three-click hand-off is right there. Nothing is downloaded without your say-so either way.
+
+If you keep your own mirror, a **custom source** pointing at your ISO plus its checksum makes Windows behave exactly like every Linux entry — that path has always been open.
 
 ---
 
@@ -172,7 +179,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 217 unit tests in `IsotopeCore`, 149 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 159 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 
