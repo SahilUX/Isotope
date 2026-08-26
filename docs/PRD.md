@@ -200,4 +200,6 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 
   It works with the setting off, because "does this work?" is the question you ask *before* deciding to turn it on. The hand-off sheet shows the same reason text instead of a bare "refused".
 
-- **F53** **The pin button shows its action, not its state.** An unpinned row drew `pin.slash` while its tooltip offered "Pin this version"; a pinned row drew `pin.fill` while offering to unpin. The icons are swapped so the button says what pressing it does — the state is already on the row, in the status label beside it.
+- **F53** **The pin button shows its action, not its state**, and says it once. An unpinned row drew `pin.slash` while its tooltip offered "Pin this version"; a pinned row drew `pin.fill` while offering to unpin. The icons are swapped so the button says what pressing it does.
+
+  A pinned Ventoy row then said the same thing three times — "· kept as is" in the version line, a "Pinned" status label, and the button — so the status label is dropped for that state. The flashed-drive row keeps its label: there the pin control is a checkbox further down the panel, not an icon on the row, so the label is the only inline indicator.

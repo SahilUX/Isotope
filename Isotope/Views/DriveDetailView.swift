@@ -477,10 +477,10 @@ private struct AssignmentRow: View {
     private var statusLabel: some View {
         switch store.staleness(of: assignment) {
         case .pinned:
-            Label("Pinned", systemImage: "pin.fill")
-                .font(.caption)
-                .labelStyle(.titleAndIcon)
-                .foregroundStyle(.secondary)
+            // Nothing: the row already says it twice over — "· kept as is" in
+            // the version line, and the unpin button sitting right here. A third
+            // "Pinned" beside them was noise.
+            EmptyView()
         case .upToDate:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
         case .buildBehind:
