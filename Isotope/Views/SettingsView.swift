@@ -8,6 +8,10 @@ struct SettingsView: View {
     @State private var cacheBytes: Int64?
     @State private var clearing = false
     @State private var confirmingHistoryClear = false
+    /// PRD F49: the result of Settings' "Test" button, so the toggle is not the
+    /// only feedback a feature this likely to be refused ever gives.
+    @State private var windowsTest: WindowsDownloadAttempt?
+    @State private var isTestingWindows = false
 
     var body: some View {
         Form {
@@ -65,6 +69,13 @@ struct SettingsView: View {
                 Text("Microsoft's download service refuses requests that do not come from a browser, so this usually fails and Isotope falls back to opening the download page. When it does work, the ISO is checksum-verified like any other. Nothing is downloaded without your say-so either way.")
                     .font(.caption)
                     .foregroundStyle(.secondary)
+                // The toggle alone tells you nothing about whether Microsoft
+                // will play along. This asks them, now, and shows the answer.
+                LabeledContent("Check whether it works") {
+                    Button(isTestingWindows ? "Asking Microsoft…" : "Test Now") { testWindowsDownload() }
+                        .disabled(isTestingWindows || store.firstWindowsChannel == nil)
+                }
+                if let windowsTest { windowsTestResult(windowsTest) }
             }
             Section("Flashing") {
                 // PRD F29: read-back verification, on by default.
@@ -136,6 +147,49 @@ struct SettingsView: View {
                 Task { await downloads.setMaxConcurrent(value) }
             }
         })
+    }
+
+    /// Runs the real attempt against the first Windows channel in the catalog —
+    /// the same code path an update takes, so a pass here means a pass there.
+    private func testWindowsDownload() {
+        guard let channel = store.firstWindowsChannel else { return }
+        isTestingWindows = true
+        windowsTest = nil
+        Task {
+            windowsTest = await store.attemptWindowsDownload(entryID: channel.entryID,
+                                                             channelID: channel.channelID)
+            isTestingWindows = false
+        }
+    }
+
+    @ViewBuilder
+    private func windowsTestResult(_ attempt: WindowsDownloadAttempt) -> some View {
+        switch attempt {
+        case .resolved(let download):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Microsoft answered with a link", systemImage: "checkmark.circle.fill")
+                    .font(.callout).foregroundStyle(.green)
+                Text(download.fileName).font(.caption.monospaced()).textSelection(.enabled)
+                Text(download.sha256 == nil
+                     ? "No checksum came with it, so a download would be labelled unverified."
+                     : "A checksum came with it, so downloads will be verified as usual.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .refused(let reason):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("Microsoft refused", systemImage: "hand.raised.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                Text(reason).font(.caption.monospaced()).textSelection(.enabled)
+                Text("Expected — their service rejects non-browser clients. Windows downloads will open the download page instead, which works.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+        case .failed(let reason):
+            VStack(alignment: .leading, spacing: 2) {
+                Label("The attempt could not be made", systemImage: "exclamationmark.triangle.fill")
+                    .font(.callout).foregroundStyle(.orange)
+                Text(reason).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+            }
+        }
     }
 
     private var windowsAutoDownloadBinding: Binding<Bool> {

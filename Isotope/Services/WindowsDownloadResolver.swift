@@ -22,7 +22,29 @@ import IsotopeCore
 /// link, so a resolved download is verified like any other — an automatic
 /// download that could not be checked would not be worth having.
 protocol WindowsDownloadResolving: Sendable {
-    func resolve(catalog: WindowsMediaCatalog, referer: URL) async -> WindowsResolvedDownload?
+    func attempt(catalog: WindowsMediaCatalog, referer: URL) async -> WindowsDownloadAttempt
+}
+
+/// What actually happened, in enough detail to put on screen.
+///
+/// A bare "nil" was the original design and it was wrong for the one question
+/// the user has: *is this thing working?* Silence cannot distinguish "Microsoft
+/// refused" from "the setting is off" from "there is no network", and a feature
+/// this likely to be refused has to be able to say which.
+enum WindowsDownloadAttempt: Sendable, Equatable {
+    /// Microsoft answered with a link. `sha256` may still be nil.
+    case resolved(WindowsResolvedDownload)
+    /// Microsoft answered, and said no. Carries their own words where they gave
+    /// any — "Sentinel marked this request as rejected."
+    case refused(String)
+    /// Never got a usable answer: no network, a changed response shape, a
+    /// non-2xx status.
+    case failed(String)
+
+    var download: WindowsResolvedDownload? {
+        guard case .resolved(let download) = self else { return nil }
+        return download
+    }
 }
 
 struct WindowsResolvedDownload: Sendable, Hashable {
@@ -47,7 +69,7 @@ struct WindowsDownloadResolver: WindowsDownloadResolving {
 
     init(http: HTTPClient = URLSessionHTTPClient()) { self.http = http }
 
-    func resolve(catalog: WindowsMediaCatalog, referer: URL) async -> WindowsResolvedDownload? {
+    func attempt(catalog: WindowsMediaCatalog, referer: URL) async -> WindowsDownloadAttempt {
         let sessionID = UUID().uuidString.lowercased()
         var headers = Self.headers
         headers["Referer"] = referer.absoluteString
@@ -57,18 +79,51 @@ struct WindowsDownloadResolver: WindowsDownloadResolving {
             _ = try? await http.data(from: registration, headers: Self.headers)
         }
 
-        // 2 — the SKU for the wanted language.
-        guard let skuURL = catalog.requestURL(sessionID: sessionID),
-              let skuResponse = try? await http.requireData(from: skuURL, headers: headers),
-              let skuID = Self.skuID(inResponse: skuResponse.body, language: catalog.language)
-        else { return nil }
+        // 2 — the SKU for the wanted language. This call is not the guarded
+        //     one; if it fails, something else is wrong (usually the network).
+        guard let skuURL = catalog.requestURL(sessionID: sessionID) else {
+            return .failed("Isotope could not build the request URL for this entry.")
+        }
+        let skuResponse: HTTPResponse
+        do {
+            skuResponse = try await http.requireData(from: skuURL, headers: headers)
+        } catch {
+            return .failed("Could not reach Microsoft: \(error.localizedDescription)")
+        }
+        guard let skuID = Self.skuID(inResponse: skuResponse.body, language: catalog.language) else {
+            return .failed("Microsoft's edition list did not contain a “\(catalog.language)” entry.")
+        }
 
         // 3 — the link itself. This is the call that is usually refused.
-        guard let linkURL = Self.downloadLinksURL(catalog: catalog, skuID: skuID, sessionID: sessionID),
-              let response = try? await http.requireData(from: linkURL, headers: headers),
-              let root = try? JSONSerialization.jsonObject(with: response.body)
-        else { return nil }
-        return Self.download(in: root)
+        guard let linkURL = Self.downloadLinksURL(catalog: catalog, skuID: skuID, sessionID: sessionID) else {
+            return .failed("Isotope could not build the download-link request.")
+        }
+        let response: HTTPResponse
+        do {
+            response = try await http.requireData(from: linkURL, headers: headers)
+        } catch {
+            return .failed("Microsoft did not answer the download-link request: \(error.localizedDescription)")
+        }
+        guard let root = try? JSONSerialization.jsonObject(with: response.body) else {
+            return .failed("Microsoft answered the download-link request with something that is not JSON.")
+        }
+        if let download = Self.download(in: root) { return .resolved(download) }
+        return .refused(Self.refusal(in: root))
+    }
+
+    /// Microsoft's own words for the refusal, so the UI quotes rather than
+    /// paraphrases. Falls back to a plain statement when the payload carries no
+    /// message at all.
+    static func refusal(in json: Any) -> String {
+        guard let object = json as? [String: Any],
+              let errors = object["Errors"] as? [[String: Any]] else {
+            return "Microsoft answered without a download link."
+        }
+        let messages = errors.compactMap { error -> String? in
+            (error["Value"] as? String) ?? (error["Key"] as? String)
+        }
+        guard !messages.isEmpty else { return "Microsoft answered without a download link." }
+        return messages.joined(separator: " ")
     }
 
     // MARK: - Parsing

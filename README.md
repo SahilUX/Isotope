@@ -93,7 +93,9 @@ A row therefore reads *25H2 (build 26200.6584) → 25H2 v2 (build 26200.9168)*, 
 
 Partly, and the honest answer is worth stating plainly. Microsoft's download service has two relevant endpoints. The one that reports **what is being served** answers anybody — that is what the revision tracking above uses. The one that **mints a download link** is behind an anti-automation check that replies `"Sentinel marked this request as rejected"` to anything that is not a browser session; it refused correctly-formed requests from an ordinary home connection during development, which is why Rufus's Fido script fails for so many people too.
 
-So there is a setting — **Try to download Windows ISOs without the browser**, off by default — that attempts it anyway and tells you which of the two things happened. When Microsoft answers, the link comes with its SHA-256 and the ISO is downloaded, verified and placed like any other. When it refuses, the sheet says so and the normal three-click hand-off is right there. Nothing is downloaded without your say-so either way.
+So there is a setting — **Try to download Windows ISOs without the browser**, off by default — that attempts it anyway and tells you which of the two things happened. When Microsoft answers, the link comes with its SHA-256 and the ISO is downloaded, verified and placed like any other. When it refuses, you see their own words for it and the normal three-click hand-off is right there. Nothing is downloaded without your say-so either way.
+
+Next to that setting is **Test Now**, which runs the real attempt and reports the outcome — answered, refused (quoting Microsoft), or could not be tried. It works with the setting off, because that is the question you want answered before turning it on.
 
 If you keep your own mirror, a **custom source** pointing at your ISO plus its checksum makes Windows behave exactly like every Linux entry — that path has always been open.
 
@@ -179,7 +181,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 159 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 169 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

@@ -375,7 +375,10 @@ private struct AssignmentRow: View {
                 Button {
                     setPolicy(assignment.isPinned ? .trackLatest : .keepAsIs)
                 } label: {
-                    Image(systemName: assignment.isPinned ? "pin.fill" : "pin.slash")
+                    // The icon is the *action*, not the state: a pinned row
+                    // offers "unpin", an unpinned one offers "pin". The state
+                    // itself is already on the row, in `statusLabel`.
+                    Image(systemName: assignment.isPinned ? "pin.slash" : "pin.fill")
                 }
                 .buttonStyle(.borderless)
                 .disabled(assignment.isPinned && !canTrackLatest)

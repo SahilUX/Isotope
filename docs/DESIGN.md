@@ -264,3 +264,13 @@ Refusals are structural, not stylistic: a non-WIM magic, a compressed XML resour
 
 ### A concurrency note worth keeping
 `UpdateEngine.shouldDiscard` (F47) reads the setting *before* releasing the operation's claim on a cache key. Awaiting the main actor between the release and the check let two drives finishing the same ISO both release, both resume, and both conclude they were last — deleting a file the other still wanted. Claims are also registered for the whole batch up front, because `beginOperation` suspends and the first operation could otherwise finish before the second was counted. Both were caught by a test that failed one run in three; the fix is ordering, not retries.
+
+## 13. v1.7.1 addendum — observable settings, a visible attempt (implements PRD F51–F53)
+
+`AppSettings` is now an `@Observable final class`. The macro instruments *stored* properties only, and every property here is computed over `UserDefaults`, so each one calls `access(keyPath:)` in its getter and `withMutation(keyPath:)` in its setter by hand — that is what makes a read inside a view body register a dependency. All of its readers are already on the main actor (`AppStore` is `@MainActor`; the two engines go through `AppStore.discardsCacheAfterPlacement`), so the reference type costs nothing in isolation.
+
+`AppSettingsObservationTests` asserts the observation itself with `withObservationTracking`, not the storage — storage was never the part that broke.
+
+`WindowsDownloadResolving` returns `WindowsDownloadAttempt` (`.resolved` / `.refused(String)` / `.failed(String)`) instead of an optional. The distinction is the feature: a refusal is Microsoft saying no and is expected, a failure is everything else, and an optional could express neither. `WindowsDownloadResolver.refusal(in:)` lifts `Errors[].Value` out of the payload so the UI quotes rather than paraphrases.
+
+`AppStore.attemptWindowsDownload(entryID:channelID:)` is the seam Settings' Test button uses — no drive, no assignment, and no dependence on the setting being on.

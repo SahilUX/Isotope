@@ -24,8 +24,9 @@ struct WindowsManualSheet: View {
         case trying
         /// Microsoft answered with a link; the normal pipeline has it now.
         case started(String)
-        /// Refused, or nothing usable came back. The manual steps below stand.
-        case refused
+        /// Refused or failed. Carries Microsoft's own words where they gave any;
+        /// the manual steps below stand either way.
+        case refused(String)
     }
 
     let item: UpdatePlanItem
@@ -100,10 +101,13 @@ struct WindowsManualSheet: View {
                 Text("It is being downloaded, checksum-verified and placed on “\(item.driveName)” like any other ISO. You can close this window; progress is in Activity.")
                     .font(.caption).foregroundStyle(.secondary)
             }
-        case .refused:
+        case .refused(let reason):
             VStack(alignment: .leading, spacing: 4) {
                 Label("Microsoft refused the automated request", systemImage: "hand.raised.fill")
                     .font(.callout).foregroundStyle(.orange)
+                Text(reason)
+                    .font(.caption.monospaced()).foregroundStyle(.secondary)
+                    .textSelection(.enabled)
                 Text("Their download service rejects clients that are not a browser, which is why this stays a manual step. Carry on below — it is three clicks.")
                     .font(.caption).foregroundStyle(.secondary)
             }
@@ -203,12 +207,13 @@ struct WindowsManualSheet: View {
         guard store.settings.attemptWindowsAutoDownload, attempt == .notTried else { return }
         attempt = .trying
         Task {
-            guard let resolved = await store.resolveWindowsDownload(for: item) else {
-                attempt = .refused
-                return
+            switch await store.attemptWindowsDownload(for: item) {
+            case .resolved(let resolved):
+                store.startResolvedWindowsDownload(resolved, for: item)
+                attempt = .started(resolved.fileName)
+            case .refused(let reason), .failed(let reason):
+                attempt = .refused(reason)
             }
-            store.startResolvedWindowsDownload(resolved, for: item)
-            attempt = .started(resolved.fileName)
         }
     }
 

@@ -122,33 +122,40 @@ final class WindowsAutoDownloadTests: XCTestCase {
                        driveKeepsOldVersions: false, keepReplacedAsPinned: false)
     }
 
-    func testNothingIsAttemptedWhileTheSettingIsOff() async {
-        let resolver = FakeWindowsResolver(result: .init(
-            url: URL(string: "https://ms.invalid/Win11.iso")!, fileName: "Win11.iso", sha256: nil))
-        let store = await makeStore(autoDownload: false, resolver: resolver)
-        let resolved = await store.resolveWindowsDownload(for: item)
-        XCTAssertNil(resolved)
-        XCTAssertEqual(resolver.calls, 0)
-    }
-
-    func testARefusalLeavesTheManualPathIntact() async {
-        let resolver = FakeWindowsResolver(result: nil)
+    func testARefusalIsReportedInMicrosoftsOwnWords() async {
+        // "How do I know if it is working?" — this is the answer: the refusal
+        // is carried out of the resolver verbatim rather than swallowed.
+        let resolver = FakeWindowsResolver(result: .refused("Sentinel marked this request as rejected."))
         let store = await makeStore(autoDownload: true, resolver: resolver)
-        let resolved = await store.resolveWindowsDownload(for: item)
-        XCTAssertNil(resolved)
+        let attempt = await store.attemptWindowsDownload(for: item)
+        XCTAssertEqual(attempt, .refused("Sentinel marked this request as rejected."))
+        XCTAssertNil(attempt.download)
         XCTAssertEqual(resolver.calls, 1)
         // The hand-off page is still there, which is what the sheet falls back to.
         XCTAssertNotNil(store.manualDownloadPage(entryID: "windows-11", channelID: "default"))
     }
 
+    func testTheTestButtonCanAskWithoutADriveOrAnAssignment() async {
+        let resolver = FakeWindowsResolver(result: .refused("Sentinel marked this request as rejected."))
+        let store = await makeStore(autoDownload: false, resolver: resolver)
+        // Settings tests the mechanism, so it finds the channel itself — and it
+        // works with the setting off, because that is what "does this work?"
+        // means before you decide to turn it on.
+        let channel = store.firstWindowsChannel
+        XCTAssertEqual(channel?.entryID, "windows-11")
+        let attempt = await store.attemptWindowsDownload(entryID: "windows-11", channelID: "default")
+        XCTAssertEqual(attempt, .refused("Sentinel marked this request as rejected."))
+        XCTAssertEqual(resolver.calls, 1)
+    }
+
     func testASuccessfulResolveCarriesTheChecksumIntoTheRequest() async throws {
         let digest = String(repeating: "a", count: 64)
-        let resolver = FakeWindowsResolver(result: .init(
+        let resolver = FakeWindowsResolver(resolved: .init(
             url: URL(string: "https://ms.invalid/Win11_25H2_English_x64v2.iso")!,
             fileName: "Win11_25H2_English_x64v2.iso", sha256: digest))
         let store = await makeStore(autoDownload: true, resolver: resolver)
-        let attempt = await store.resolveWindowsDownload(for: item)
-        let resolved = try XCTUnwrap(attempt)
+        let attempt = await store.attemptWindowsDownload(for: item)
+        let resolved = try XCTUnwrap(attempt.download)
         XCTAssertEqual(resolved.sha256, digest)
         XCTAssertEqual(resolver.lastCatalog?.productEditionID, "3321")
 
@@ -163,7 +170,7 @@ final class WindowsAutoDownloadTests: XCTestCase {
     }
 
     func testAnEntryWithNoConnectorConfigurationIsNeverAttempted() async {
-        let resolver = FakeWindowsResolver(result: nil)
+        let resolver = FakeWindowsResolver(result: .refused("unused"))
         let settings = settings()
         settings.attemptWindowsAutoDownload = true
         let store = AppStore(locations: StoreLocations(root: root), catalogResourceURL: nil,
@@ -177,24 +184,46 @@ final class WindowsAutoDownloadTests: XCTestCase {
                 downloadPage: URL(string: "https://microsoft.invalid/w11")!))],
             isBuiltIn: false))
 
-        let attempt = await store.resolveWindowsDownload(for: item)
-        XCTAssertNil(attempt)
+        let attempt = await store.attemptWindowsDownload(for: item)
+        // Says so, rather than failing silently the way a bare nil did.
+        guard case .failed(let reason) = attempt else { return XCTFail("expected .failed, got \(attempt)") }
+        XCTAssertTrue(reason.contains("no Microsoft download configuration"), reason)
         XCTAssertEqual(resolver.calls, 0)
+        XCTAssertNil(store.firstWindowsChannel)
+    }
+
+    // MARK: - Reading the refusal
+
+    func testMicrosoftsOwnMessageIsWhatGetsShown() throws {
+        let json = try JSONSerialization.jsonObject(with: Data("""
+        {"Errors":[{"Key":"ErrorSettings.SentinelReject",
+                    "Value":"Sentinel marked this request as rejected.","Type":8}]}
+        """.utf8))
+        XCTAssertEqual(WindowsDownloadResolver.refusal(in: json),
+                       "Sentinel marked this request as rejected.")
+    }
+
+    func testARefusalWithNoMessageStillSaysSomething() throws {
+        let json = try JSONSerialization.jsonObject(with: Data("{\"Errors\":null}".utf8))
+        XCTAssertEqual(WindowsDownloadResolver.refusal(in: json),
+                       "Microsoft answered without a download link.")
     }
 }
 
 private final class FakeWindowsResolver: WindowsDownloadResolving, @unchecked Sendable {
     private let lock = NSLock()
-    private let result: WindowsResolvedDownload?
+    private let result: WindowsDownloadAttempt
     private var _calls = 0
     private var _lastCatalog: WindowsMediaCatalog?
 
-    init(result: WindowsResolvedDownload?) { self.result = result }
+    init(result: WindowsDownloadAttempt) { self.result = result }
+
+    convenience init(resolved: WindowsResolvedDownload) { self.init(result: .resolved(resolved)) }
 
     var calls: Int { lock.withLock { _calls } }
     var lastCatalog: WindowsMediaCatalog? { lock.withLock { _lastCatalog } }
 
-    func resolve(catalog: WindowsMediaCatalog, referer: URL) async -> WindowsResolvedDownload? {
+    func attempt(catalog: WindowsMediaCatalog, referer: URL) async -> WindowsDownloadAttempt {
         lock.withLock {
             _calls += 1
             _lastCatalog = catalog

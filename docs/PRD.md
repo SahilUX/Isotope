@@ -188,3 +188,16 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
   So Isotope can *try*, behind a setting that is **off by default**. On, the hand-off sheet attempts the resolve and says which of the two things happened: "Microsoft answered — downloading …" or "Microsoft refused the automated request", with the manual steps right there underneath. A link that does come back carries its SHA-256, so a resolved download is verified like any other; the manual path is unchanged and remains the supported one.
 
 - **F50** **One request per URL per check.** The catalog now has 106 channels and many of them legitimately share a URL — 24 Ubuntu-family channels behind two `changelogs.ubuntu.com` index files, 16 Fedora channels behind one `releases.json`, Kali's five images and Debian Live's six each behind a single `SHA256SUMS`. Fanning out one request per *channel* earned an HTTP 429 and reported six Ubuntu flavours as failing when nothing was wrong with them. Requests are now coalesced per (method, URL, headers) — in-flight requests join, successful answers are reused for 120 s, failures never are — and a user-initiated check clears that memory first.
+
+## 16. v1.7.1 addendum — Settings that respond, and a way to see F49 work (2026-08-26)
+
+- **F51** **Settings controls reflect what they do.** Every toggle and picker in Settings wrote its value straight through to `UserDefaults` and then carried on drawing the old one: the value changed, SwiftUI was never told, and the control snapped back. Reported as "toggling makes no difference", which is precisely what it looked like. `AppSettings` becomes an observable reference type so a control redraws when its own value changes. Nothing about the storage or the defaults moves.
+
+- **F52** **"Test Now" for the Windows attempt (F49).** A setting whose whole point is that it may not work has to be able to say whether it works. Settings gains a **Test Now** button that runs the real attempt against the first Windows channel in the catalog — the same code path an update takes — and reports one of three outcomes, quoting Microsoft where they said anything:
+  - *Microsoft answered with a link* — with the filename and whether a checksum came with it.
+  - *Microsoft refused* — with their own words ("Sentinel marked this request as rejected."), and the note that downloads will use the browser instead.
+  - *The attempt could not be made* — a network failure or a changed response shape, told apart from a refusal.
+
+  It works with the setting off, because "does this work?" is the question you ask *before* deciding to turn it on. The hand-off sheet shows the same reason text instead of a bare "refused".
+
+- **F53** **The pin button shows its action, not its state.** An unpinned row drew `pin.slash` while its tooltip offered "Pin this version"; a pinned row drew `pin.fill` while offering to unpin. The icons are swapped so the button says what pressing it does — the state is already on the row, in the status label beside it.

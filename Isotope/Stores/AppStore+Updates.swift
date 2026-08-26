@@ -245,15 +245,34 @@ extension AppStore {
 
     /// PRD F49: try to resolve a real download link for a Windows item.
     ///
-    /// Nil covers every "no": the setting is off, the entry has no connector
-    /// configuration, or — the usual case — Microsoft refused. The caller falls
-    /// back to the browser hand-off, which is the supported path and always was.
-    func resolveWindowsDownload(for item: UpdatePlanItem) async -> WindowsResolvedDownload? {
-        guard settings.attemptWindowsAutoDownload,
-              let catalog = windowsMediaCatalog(entryID: item.entryID, channelID: item.channelID),
-              let referer = manualDownloadPage(entryID: item.entryID, channelID: item.channelID)
-        else { return nil }
-        return await windowsResolver.resolve(catalog: catalog, referer: referer)
+    /// Reports *what happened* rather than just failing quietly — Microsoft
+    /// refusing, an entry with no connector configuration and a dead network are
+    /// three different things, and the sheet says which. The caller falls back
+    /// to the browser hand-off for all of them.
+    func attemptWindowsDownload(for item: UpdatePlanItem) async -> WindowsDownloadAttempt {
+        await attemptWindowsDownload(entryID: item.entryID, channelID: item.channelID)
+    }
+
+    /// The same attempt addressed by channel, which is what Settings' "Test"
+    /// button uses: it answers "is this working?" without needing a drive, an
+    /// assignment or a pending update.
+    func attemptWindowsDownload(entryID: String, channelID: String) async -> WindowsDownloadAttempt {
+        guard let catalog = windowsMediaCatalog(entryID: entryID, channelID: channelID),
+              let referer = manualDownloadPage(entryID: entryID, channelID: channelID)
+        else { return .failed("This entry has no Microsoft download configuration to try.") }
+        return await windowsResolver.attempt(catalog: catalog, referer: referer)
+    }
+
+    /// The first Windows channel in the catalog, for a test that is about the
+    /// mechanism rather than about one particular entry.
+    var firstWindowsChannel: (entryID: String, channelID: String)? {
+        for entry in allEntries where entry.kind == .windows {
+            for channel in entry.channels
+            where windowsMediaCatalog(entryID: entry.id, channelID: channel.id) != nil {
+                return (entry.id, channel.id)
+            }
+        }
+        return nil
     }
 
     /// PRD F49: hand a resolved Windows link to the ordinary pipeline —
