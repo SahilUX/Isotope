@@ -64,7 +64,10 @@ struct WindowsManualSheet: View {
         .frame(width: 500)
         .frame(maxHeight: 560)
         .onAppear {
-            watcher.pattern = Self.pattern(for: item)
+            watcher.pattern = Self.pattern(
+                for: item,
+                catalogPattern: store.mediaFileNamePattern(entryID: item.entryID,
+                                                           channelID: item.channelID))
             watcher.start()
             tryAutomaticDownload()
         }
@@ -155,11 +158,18 @@ struct WindowsManualSheet: View {
                 // ISO or saved it elsewhere, picking it by hand always works.
                 Button("Choose File…") { chooseFile() }.buttonStyle(.link).font(.caption)
             }
-            if watcher.candidates.isEmpty {
-                Text("No matching ISO yet. Isotope re-checks every few seconds — or use Choose File… to point at it yourself.")
+            if !watcher.folderIsReadable {
+                Text("Isotope could not read your Downloads folder. Grant it access in System Settings → Privacy & Security → Files and Folders, or use Choose File… to point at the ISO directly.")
+                    .font(.callout).foregroundStyle(.orange)
+            } else if watcher.candidates.isEmpty, watcher.otherISOs.isEmpty {
+                Text("No ISO here yet. Isotope re-checks every few seconds — or use Choose File… to point at it yourself.")
                     .font(.callout).foregroundStyle(.secondary)
-            } else {
-                ForEach(watcher.candidates) { candidate in
+            }
+            if watcher.candidates.isEmpty, !watcher.otherISOs.isEmpty {
+                Text("Nothing here is named the way Microsoft names this image, so these are every ISO in the folder, newest first. Pick the one you downloaded.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+            ForEach(watcher.candidates + watcher.otherISOs) { candidate in
                     HStack {
                         Image(systemName: selected == candidate ? "largecircle.fill.circle" : "circle")
                             .foregroundStyle(selected == candidate ? Color.accentColor : .secondary)
@@ -176,7 +186,6 @@ struct WindowsManualSheet: View {
                         hash = nil
                         hashError = nil
                     }
-                }
             }
         }
     }
@@ -277,9 +286,19 @@ struct WindowsManualSheet: View {
 
     /// Match what the vendor actually names the file, loosely enough to survive
     /// a naming change: any ISO starting with the entry's first word.
-    static func pattern(for item: UpdatePlanItem) -> String {
-        let stem = item.title.split(separator: " ").first.map(String.init) ?? "Win"
-        let escaped = NSRegularExpression.escapedPattern(for: stem)
-        return "(?i)^\(escaped).*\\.iso$"
+    /// What to watch for in Downloads.
+    ///
+    /// The catalog already carries the pattern that recognises this channel's
+    /// media on a drive (PRD F41), and that is the authority — deriving one from
+    /// the entry's *title* was the bug this replaces: "Windows 11" gave
+    /// `^Windows.*\.iso$`, which never matches Microsoft's own
+    /// `Win11_25H2_English_x64_v2.iso`, so a downloaded ISO sat in the folder
+    /// unseen.
+    ///
+    /// The fallback stays deliberately loose, because a pattern that misses is
+    /// worse than one that offers too much: anything unmatched is still listed
+    /// as an "other ISO" for the user to pick.
+    static func pattern(for item: UpdatePlanItem, catalogPattern: String?) -> String {
+        catalogPattern ?? #"(?i)^win.*\.iso$"#
     }
 }

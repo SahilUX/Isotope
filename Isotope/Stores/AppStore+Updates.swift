@@ -243,6 +243,15 @@ extension AppStore {
         return entry(id: entryID)?.homepage
     }
 
+    /// PRD F41: the regex that recognises a channel's media by filename — the
+    /// same one drive scans match with. The Downloads watch uses it too, so
+    /// "what this ISO is called" is defined in exactly one place: the catalog.
+    func mediaFileNamePattern(entryID: String, channelID: String) -> String? {
+        guard let pattern = entry(id: entryID)?.channel(id: channelID)?.provider.fileNamePattern,
+              !pattern.isEmpty else { return nil }
+        return pattern
+    }
+
     /// PRD F48/F49: the download-connector configuration for a Windows channel.
     func windowsMediaCatalog(entryID: String, channelID: String) -> WindowsMediaCatalog? {
         guard let provider = entry(id: entryID)?.channel(id: channelID)?.provider,

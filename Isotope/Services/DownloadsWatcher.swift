@@ -21,11 +21,26 @@ struct FoundISO: Identifiable, Hashable, Sendable {
 @Observable
 @MainActor
 final class DownloadsWatcher {
+    /// ISOs whose name matches what this entry's media is called.
     private(set) var candidates: [FoundISO] = []
+    /// Every *other* `.iso` in the folder, newest first. A recognition pattern
+    /// that misses — a renamed file, a naming change at the vendor — must not
+    /// leave the user with an empty list and a file dialog; the file is right
+    /// there, so offer it.
+    private(set) var otherISOs: [FoundISO] = []
+    /// False when the folder could not be read at all, which on macOS usually
+    /// means the app has not been granted access to it. Worth saying out loud:
+    /// it looks identical to "your download has not arrived" otherwise.
+    private(set) var folderIsReadable = true
     private(set) var isWatching = false
     private var task: Task<Void, Never>?
 
-    /// Regex matched against the filename; `Win11.*\.iso` for the Windows entry.
+    /// How many unmatched ISOs to offer. Enough to cover "I downloaded it
+    /// yesterday", short enough not to become a file browser.
+    static let maxOtherISOs = 8
+
+    /// Regex matched against the filename; the catalog's own recognition
+    /// pattern for the entry, when it has one.
     var pattern: String = #"(?i)^win.*\.iso$"#
     var interval: TimeInterval = 5
     var folder: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -53,19 +68,25 @@ final class DownloadsWatcher {
 
     /// Newest first — the file the user just fetched is the one they mean.
     func scan() {
-        candidates = Self.matches(in: folder, pattern: pattern)
+        let result = Self.scan(folder: folder, pattern: pattern)
+        folderIsReadable = result.isReadable
+        candidates = result.matching
+        otherISOs = Array(result.other.prefix(Self.maxOtherISOs))
     }
 
-    static func matches(in folder: URL, pattern: String) -> [FoundISO] {
+    /// Every ISO in the folder, split by whether it matches `pattern`.
+    /// `isReadable` distinguishes "no ISOs here" from "could not look".
+    static func scan(folder: URL, pattern: String)
+        -> (matching: [FoundISO], other: [FoundISO], isReadable: Bool) {
         let matcher = try? PatternMatcher(pattern, caseInsensitive: true)
         let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey, .isRegularFileKey]
         guard let contents = try? FileManager.default.contentsOfDirectory(
             at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
-        else { return [] }
-        return contents.compactMap { url -> FoundISO? in
+        else { return ([], [], false) }
+
+        let isos = contents.compactMap { url -> FoundISO? in
             let name = url.lastPathComponent
             guard DownloadArtifact.isISO(name) else { return nil }
-            guard matcher == nil || matcher?.matchesAnywhere(name) == true else { return nil }
             let values = try? url.resourceValues(forKeys: Set(keys))
             guard values?.isRegularFile != false else { return nil }
             return FoundISO(url: url, fileName: name,
@@ -73,5 +94,12 @@ final class DownloadsWatcher {
                             modifiedAt: values?.contentModificationDate ?? .distantPast)
         }
         .sorted { $0.modifiedAt > $1.modifiedAt }
+
+        let matches = { (iso: FoundISO) in matcher?.matchesAnywhere(iso.fileName) ?? true }
+        return (isos.filter(matches), isos.filter { !matches($0) }, true)
+    }
+
+    static func matches(in folder: URL, pattern: String) -> [FoundISO] {
+        scan(folder: folder, pattern: pattern).matching
     }
 }

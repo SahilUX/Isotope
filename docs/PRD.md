@@ -213,3 +213,11 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 - **F55** **Every updatable row can be updated on demand.** The row's context menu gains "Update Now" / "Get ISO…", enabled whenever the assignment is not pinned and a release is resolved. An up-to-date row, or one whose installed file could not be recognised, is not a row the user should have to argue with. Pinned assignments stay exactly as they were — PRD F33 outranks this, the file is off limits however the request arrives.
 
 - **F56** **The Windows sheet says what the download will actually get you.** When release and media revision already match and only the build differs, the hand-off sheet states plainly that the newer build ships through Windows Update rather than in the ISO, so Microsoft's page will most likely return the same media — and that downloading it again is harmless, because Isotope reads the build out of whatever is saved. Without that line the version arrow ("26200.8037 → 26200.9168") quietly implies a newer ISO exists to be fetched.
+
+## 18. v1.7.3 addendum — the Downloads watch actually watches (2026-08-27)
+
+- **F57** **The watch uses the catalog's recognition pattern.** It built its own from the entry's *title* instead: "Windows 11" → `^Windows.*\.iso$`, which never matches Microsoft's own `Win11_25H2_English_x64_v2.iso`. The downloaded ISO sat in the folder while the sheet said "No matching ISO yet", and neither the poll nor Rescan could ever have found it. The catalog already carries the pattern that recognises this channel's media on a drive (F41); that is now the only thing consulted, so a name is defined in exactly one place.
+
+- **F58** **A pattern that misses is never a dead end.** The sheet now also lists every *other* `.iso` in the folder, newest first, under a line saying nothing there is named the way this image usually is. A renamed download, or a vendor changing its naming, costs the user one extra click rather than sending them to a file dialog.
+
+- **F59** **"Cannot read the folder" is not "your download has not arrived".** macOS gates access to Downloads, and a denied read looked exactly like an empty folder. The watch reports the difference, and the sheet says where to grant access.
