@@ -203,3 +203,11 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 - **F53** **The pin button shows its action, not its state**, and says it once. An unpinned row drew `pin.slash` while its tooltip offered "Pin this version"; a pinned row drew `pin.fill` while offering to unpin. The icons are swapped so the button says what pressing it does.
 
   A pinned Ventoy row then said the same thing three times — "· kept as is" in the version line, a "Pinned" status label, and the button — so the status label is dropped for that state. The flashed-drive row keeps its label: there the pin control is a checkbox further down the panel, not an icon on the row, so the label is the only inline indicator.
+
+## 17. v1.7.2 addendum — a build-behind row you can act on (2026-08-26)
+
+- **F54** **`buildBehind` gets a button.** F46 was right that a newer servicing build is not a downloadable update and should not be counted as one — and then wrong about what to do next: the row showed "Newer build shipped" and offered no control at all, so the honest information became a dead end. The update button now appears for `buildBehind` as well as for `stale`. Nothing about the counting changes: it is still not in "N updates available", still not swept up by Update All, and still not a reason to notify.
+
+- **F55** **Every updatable row can be updated on demand.** The row's context menu gains "Update Now" / "Get ISO…", enabled whenever the assignment is not pinned and a release is resolved. An up-to-date row, or one whose installed file could not be recognised, is not a row the user should have to argue with. Pinned assignments stay exactly as they were — PRD F33 outranks this, the file is off limits however the request arrives.
+
+- **F56** **The Windows sheet says what the download will actually get you.** When release and media revision already match and only the build differs, the hand-off sheet states plainly that the newer build ships through Windows Update rather than in the ISO, so Microsoft's page will most likely return the same media — and that downloading it again is harmless, because Isotope reads the build out of whatever is saved. Without that line the version arrow ("26200.8037 → 26200.9168") quietly implies a newer ISO exists to be fetched.

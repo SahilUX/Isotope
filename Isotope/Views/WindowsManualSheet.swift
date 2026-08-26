@@ -76,6 +76,14 @@ struct WindowsManualSheet: View {
             Text("Get \(item.title) \(item.toVersion)").font(.headline)
             Text("Microsoft's download links are generated per session and expire, so this one step is manual.")
                 .font(.callout).foregroundStyle(.secondary)
+            // PRD F46 amendment: say what this download will actually get you,
+            // rather than letting the version arrow imply a newer ISO exists.
+            if item.isBuildOnlyDifference {
+                Text("You already have the current media for this release. The newer build ships through Windows Update, not in the ISO, so the download page will most likely hand you the same file. Downloading it again is harmless — Isotope reads the build out of whatever you save and will show it here.")
+                    .font(.callout)
+                    .foregroundStyle(.orange)
+                    .padding(.top, 4)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
         .padding(16)

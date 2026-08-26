@@ -85,7 +85,7 @@ Isotope pins it down with three things, in order of how much they matter:
 
 - **Feature release** — 25H2, 24H2, 22H2. The identity that means something across media, and the first thing compared.
 - **Media revision** — Microsoft reissues a release as `25H2__V2`, and their filenames say so (`…_x64v2.iso`, the original having no suffix). Isotope asks Microsoft's download connector what it is serving right now — one plain GET, no login — and compares it against what your ISO's name claims. **A newer revision is a real update**, because unlike a build, it can actually be downloaded today.
-- **Build** — 26200.6584, read out of `sources/install.wim` by mounting the ISO read-only (no administrator rights, no writes). Compared only once release and revision match, and shown as **"Newer build shipped"** rather than an update: Microsoft services Windows monthly but reissues the ISO rarely, so prompting would send you to fetch the file you already have.
+- **Build** — 26200.6584, read out of `sources/install.wim` by mounting the ISO read-only (no administrator rights, no writes). Compared only once release and revision match, and shown as **"Newer build shipped"** rather than an update: Microsoft services Windows monthly but reissues the ISO rarely, so counting it would send you to fetch the file you already have. The button is still there if you want to fetch it anyway, and the sheet tells you what you will actually get.
 
 A row therefore reads *25H2 (build 26200.6584) → 25H2 v2 (build 26200.9168)*, and you can tell at a glance which part of that you can do something about. An image that will not identify itself simply shows less; nothing is inferred from a filename Microsoft did not write.
 
@@ -181,7 +181,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 169 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested — 242 unit tests in `IsotopeCore`, 172 in the app layer, all offline — but this has not been through anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

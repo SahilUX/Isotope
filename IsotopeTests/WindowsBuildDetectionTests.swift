@@ -69,7 +69,9 @@ final class WindowsBuildDetectionTests: XCTestCase {
                                         provider: .windowsManual(
                                             infoURL: URL(string: "https://microsoft.invalid/w11")!,
                                             downloadPage: URL(string: "https://microsoft.invalid/w11")!,
-                                            fileNamePattern: #"^Win11_(\d{2}H\d)_[A-Za-z]+_x64\.iso$"#))],
+                                            // The real catalog's pattern, revision
+                                            // suffix and all (PRD F48).
+                                            fileNamePattern: #"^Win11_(\d{2}H\d)_[A-Za-z]+_x64(?:_?v\d+)?\.iso$"#))],
                      isBuiltIn: false)
     }
 
@@ -203,6 +205,75 @@ final class WindowsBuildDetectionTests: XCTestCase {
         store.recordWindowsBuild("26200.6584", forAssignment: assignmentID,
                                  on: drive.id, fileName: "Win11_24H2_English_x64.iso")
         XCTAssertNil(store.drive(id: drive.id)?.assignments.first?.installed?.build)
+    }
+
+    // MARK: - Acting on a build-only difference (PRD F46 amendment)
+
+    /// A drive holding Windows media that is the current release *and* the
+    /// current media revision, but an older servicing build — the state that
+    /// showed "Newer build shipped" and then offered no way to do anything.
+    private func makeBuildBehindDrive() async throws -> (AppStore, UUID, UUID) {
+        let (url, info) = volume("/Volumes/VENTOY", uuid: "UUID-W")
+        let store = makeStore(volumes: [url: info],
+                              listing: ["Win11_25H2_English_x64v2.iso"],
+                              builds: ["Win11_25H2_English_x64v2.iso": "26200.8037"])
+        await store.loadAtLaunch()
+        store.addCustomEntry(windowsEntry)
+        let drive = try store.registerDrive(at: url)
+        store.addAssignment(entryID: "windows-11", channelID: "default", to: drive.id)
+        store.setRelease(Release(version: .parse("25H2")!, fileName: "",
+                                 build: "26200.9168", mediaRevision: 2),
+                         for: ReleaseKey(entryID: "windows-11", channelID: "default"))
+        store.scanAndReconcile(driveID: drive.id)
+        _ = await waitForBuild(on: store, driveID: drive.id)
+        let assignmentID = try XCTUnwrap(store.drive(id: drive.id)?.assignments.first?.id)
+        return (store, drive.id, assignmentID)
+    }
+
+    func testABuildBehindRowIsStillOfferedAnUpdate() async throws {
+        let (store, driveID, assignmentID) = try await makeBuildBehindDrive()
+        let assignment = try XCTUnwrap(store.drive(id: driveID)?.assignments.first)
+        XCTAssertEqual(store.staleness(of: assignment), .buildBehind)
+        // Not counted as an update...
+        XCTAssertTrue(store.staleAssignments(on: try XCTUnwrap(store.drive(id: driveID))).isEmpty)
+        // ...but a plan can still be built for it on demand, which is what the
+        // row's button and the context menu ask for.
+        let plan = store.updatePlan(driveID: driveID, assignmentIDs: [assignmentID])
+        XCTAssertEqual(plan.items.count, 1)
+        let item = try XCTUnwrap(plan.items.first)
+        XCTAssertTrue(item.needsManualDownload)
+        // And the sheet is told to say what the download will really get them.
+        XCTAssertTrue(item.isBuildOnlyDifference)
+        XCTAssertEqual(item.fromVersion, "25H2 v2 (build 26200.8037)")
+        XCTAssertEqual(item.toVersion, "25H2 v2 (build 26200.9168)")
+    }
+
+    func testAnUpToDateRowCanStillBeUpdatedOnDemand() async throws {
+        let (url, info) = volume("/Volumes/VENTOY", uuid: "UUID-W")
+        let store = makeStore(volumes: [url: info], listing: ["Win11_25H2_English_x64v2.iso"])
+        await store.loadAtLaunch()
+        store.addCustomEntry(windowsEntry)
+        let drive = try store.registerDrive(at: url)
+        store.addAssignment(entryID: "windows-11", channelID: "default", to: drive.id)
+        store.setRelease(Release(version: .parse("25H2")!, fileName: "", mediaRevision: 2),
+                         for: ReleaseKey(entryID: "windows-11", channelID: "default"))
+        store.scanAndReconcile(driveID: drive.id)
+        let assignment = try XCTUnwrap(store.drive(id: drive.id)?.assignments.first)
+        XCTAssertEqual(store.staleness(of: assignment), .upToDate)
+
+        // The context menu's escape hatch: nothing is stale, but the user may
+        // still want the file fetched again.
+        let plan = store.updatePlan(driveID: drive.id, assignmentIDs: [assignment.id])
+        XCTAssertEqual(plan.items.count, 1)
+        XCTAssertFalse(try XCTUnwrap(plan.items.first).isBuildOnlyDifference)
+    }
+
+    func testAPinnedRowIsStillNeverTouched() async throws {
+        let (store, driveID, assignmentID) = try await makeBuildBehindDrive()
+        store.setUpdatePolicy(.keepAsIs, forAssignment: assignmentID, on: driveID)
+        // PRD F33 outranks the escape hatch: a pin means the file is off limits,
+        // whoever asks and however they ask.
+        XCTAssertTrue(store.updatePlan(driveID: driveID, assignmentIDs: [assignmentID]).items.isEmpty)
     }
 
     func testNonWindowsAssignmentsAreNeverMounted() async throws {

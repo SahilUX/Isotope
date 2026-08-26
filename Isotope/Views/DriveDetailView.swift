@@ -383,7 +383,7 @@ private struct AssignmentRow: View {
                 .buttonStyle(.borderless)
                 .disabled(assignment.isPinned && !canTrackLatest)
                 .help(pinHelp)
-                if !assignment.isPinned, store.staleness(of: assignment).needsUpdate {
+                if !assignment.isPinned, showsUpdateButton {
                     Button(isManual ? "Get ISO…" : "Update") { onUpdate() }
                         .disabled(!isUpdatable)
                         .help(updateHelp)
@@ -392,6 +392,13 @@ private struct AssignmentRow: View {
         }
         .padding(.vertical, 2)
         .contextMenu {
+            // The escape hatch: every row Isotope *could* update can be updated
+            // on demand, whatever the comparison concluded. A row that is up to
+            // date, or whose installed file could not be recognised, is not a
+            // row the user should have to argue with.
+            Button(isManual ? "Get ISO…" : "Update Now") { onUpdate() }
+                .disabled(assignment.isPinned || !isUpdatable)
+            Divider()
             Button("Track Latest") { setPolicy(.trackLatest) }
                 .disabled(!canTrackLatest)
             Button("Keep as Is (Pin)") { setPolicy(.keepAsIs) }
@@ -434,6 +441,15 @@ private struct AssignmentRow: View {
     private var isManual: Bool {
         store.entry(id: assignment.entryID)?
             .channel(id: assignment.channelID)?.provider.mechanism == .windowsManual
+    }
+
+    /// PRD F46 amendment: `buildBehind` is not counted as an update — nothing
+    /// downloadable is known to be newer — but it must still be *actionable*.
+    /// Showing the state and then withholding the button left the user looking
+    /// at "Newer build shipped" with no way to do anything about it.
+    private var showsUpdateButton: Bool {
+        let staleness = store.staleness(of: assignment)
+        return staleness.needsUpdate || staleness == .buildBehind
     }
 
     private var isUpdatable: Bool {

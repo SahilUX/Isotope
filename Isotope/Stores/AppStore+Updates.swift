@@ -120,6 +120,12 @@ struct UpdatePlanItem: Identifiable, Sendable {
     /// copy" for this item, so the old ISO stays and becomes a `keepAsIs`
     /// assignment of its own.
     var keepReplacedAsPinned = false
+    /// PRD F46 amendment: release and media revision already match, and only the
+    /// servicing build differs. The download is still allowed — it is the user's
+    /// call — but the sheet says plainly that Microsoft's page will most likely
+    /// hand back the same media, because newer builds ship through Windows
+    /// Update rather than in the ISO.
+    var isBuildOnlyDifference = false
 
     /// PRD F35: the checkbox is offered only when an old file would actually be
     /// deleted — something is installed, it is not the file we are about to
@@ -185,7 +191,8 @@ extension AppStore {
                 needsManualDownload: manual,
                 release: release,
                 installedFileName: installed?.fileName,
-                driveKeepsOldVersions: drive.keepOldVersions)
+                driveKeepsOldVersions: drive.keepOldVersions,
+                isBuildOnlyDifference: staleness(of: assignment, on: drive) == .buildBehind)
         }
         return UpdatePlan(items: items, driveName: drive.displayName)
     }
