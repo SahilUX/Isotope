@@ -10,6 +10,15 @@ final class SpacePlanTests: XCTestCase {
         XCTAssertEqual(SpacePlan.margin(forRequired: 5 * gb), 64 * 1024 * 1024)
         XCTAssertEqual(SpacePlan.margin(forRequired: 20 * 1024 * 1024), 1024 * 1024)
         XCTAssertEqual(SpacePlan.margin(forRequired: 0), 0)
+
+        // PRD F68: a large image gets 1% rather than a flat 64 MB. An 8.47 GB
+        // ISO onto a stick reporting 8.5 GB free passed the old pre-flight by a
+        // hair and then ran out at the very end, twelve minutes in — exFAT's
+        // free-space figure is not accurate to 0.75%.
+        XCTAssertEqual(SpacePlan.margin(forRequired: 8_471_603_200), 84_716_032)
+        XCTAssertEqual(SpacePlan.margin(forRequired: 30 * gb), 30 * gb / 100)
+        // Small transfers are unchanged: 5% of themselves.
+        XCTAssertEqual(SpacePlan.margin(forRequired: 100 * 1024 * 1024), 5 * 1024 * 1024)
         // A 12 MB file does not get asked for 64 MB of headroom.
         let tight = SpacePlan(requiredBytes: 12 * 1024 * 1024, availableBytes: 10 * 1024 * 1024,
                               reclaimableBytes: 8 * 1024 * 1024)

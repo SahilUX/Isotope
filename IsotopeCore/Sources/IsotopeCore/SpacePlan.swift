@@ -18,10 +18,19 @@ public struct SpacePlan: Sendable, Equatable {
     public static let defaultMarginBytes: Int64 = 64 * 1024 * 1024
 
     /// Slack scaled to the file: 64 MB of headroom is sensible next to a 5 GB
-    /// ISO and absurd next to a 12 MB one, so the margin is 5% of the transfer,
-    /// capped at 64 MB.
+    /// ISO and absurd next to a 12 MB one, so a small transfer gets 5% of
+    /// itself and a large one gets 64 MB — or 1% where that is more.
+    ///
+    /// PRD F68: the 1% floor for large images is not arbitrary. An 8.47 GB ISO
+    /// onto a stick reporting 8.5 GB free passed this pre-flight by a hair and
+    /// then ran out at the very end, twelve minutes in. Free space on exFAT is
+    /// approximate — cluster rounding, directory growth, the FAT itself — and
+    /// 0.75% of headroom is inside that error. 1% of an 8.47 GB ISO is 85 MB,
+    /// which turns a twelve-minute failure into an instant, accurate refusal.
     public static func margin(forRequired required: Int64) -> Int64 {
-        min(defaultMarginBytes, max(0, required / 20))
+        guard required > 0 else { return 0 }
+        let small = required / 20
+        return small < defaultMarginBytes ? small : max(defaultMarginBytes, required / 100)
     }
 
     public init(requiredBytes: Int64, availableBytes: Int64,

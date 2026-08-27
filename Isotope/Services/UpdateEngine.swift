@@ -499,14 +499,26 @@ actor UpdateEngine {
             switch failure {
             case .cancelled: throw UpdateError.cancelled
             case .driveGone: throw UpdateError.driveVanished(snapshot.driveName)
+            case .driveFull(let bytesWritten):
+                // PRD F68: what it actually was, with the real figure — the
+                // pre-flight's estimate was evidently optimistic, so quote the
+                // shortfall the copy discovered rather than the one it predicted.
+                throw UpdateError.insufficientSpace(shortfallBytes: max(0, local.sizeBytes - bytesWritten),
+                                                    driveName: snapshot.driveName)
             case .io(let message): throw UpdateError.copyFailed(message)
             }
         }
 
         // PRD F18: verify the copied size before it is given the real name.
-        guard Self.fileSize(partURL) == local.sizeBytes else {
+        let copiedBytes = Self.fileSize(partURL) ?? 0
+        guard copiedBytes == local.sizeBytes else {
             try? manager.removeItem(at: partURL)
-            throw UpdateError.copyFailed("The copied file is not the same size as the source. It was discarded; try again.")
+            // PRD F68: "not the same size as the source" described the symptom
+            // and left the user nowhere to go. Short almost always means the
+            // volume filled up — say so, with both figures.
+            throw UpdateError.copyFailed(Self.shortCopyMessage(copied: copiedBytes,
+                                                               expected: local.sizeBytes,
+                                                               driveName: snapshot.driveName))
         }
 
         await store.updateOperationPhase(id: request.id, phase: .finishing, totalBytes: local.sizeBytes)
@@ -536,6 +548,19 @@ actor UpdateEngine {
         return PlacedISO(fileName: finalName, version: request.release.version,
                          removedFileName: removedName, sizeBytes: local.sizeBytes,
                          retainedFileName: retainedName)
+    }
+
+    /// PRD F68: what to say when the file on the drive is not the size it
+    /// should be. "Not the same size as the source" described the symptom and
+    /// left the user nowhere to go; short almost always means the volume filled
+    /// up, and the two figures make that obvious.
+    static func shortCopyMessage(copied: Int64, expected: Int64, driveName: String) -> String {
+        let landed = ByteCountFormatter.string(fromByteCount: copied, countStyle: .file)
+        let wanted = ByteCountFormatter.string(fromByteCount: expected, countStyle: .file)
+        guard copied < expected else {
+            return "The copy came out at \(landed) instead of \(wanted). It was discarded; try again."
+        }
+        return "Only \(landed) of the \(wanted) ISO reached “\(driveName)” — the drive filled up. The partial file was discarded; free up space and try again."
     }
 
     private static func fileSize(_ url: URL) -> Int64? {

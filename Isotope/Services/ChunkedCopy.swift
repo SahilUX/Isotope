@@ -52,15 +52,39 @@ enum ChunkedCopy {
     enum Failure: LocalizedError, Equatable {
         case cancelled
         case driveGone
+        /// PRD F68: the volume ran out of room mid-copy. Carries what did land,
+        /// so the caller can say how far short it was.
+        case driveFull(bytesWritten: Int64)
         case io(String)
 
         var errorDescription: String? {
             switch self {
             case .cancelled: return "The copy was cancelled."
             case .driveGone: return "The drive was disconnected during the copy."
+            case .driveFull: return "The drive ran out of space during the copy."
             case .io(let message): return message
             }
         }
+    }
+
+    /// True for the one error worth naming: the volume is full.
+    ///
+    /// It arrives as `NSFileWriteOutOfSpaceError` from `FileHandle`, or as a
+    /// bare `ENOSPC` from the flush, and the two are the same fact. Before this
+    /// it was folded into "writing failed" — or, when the writes were buffered
+    /// and the failure only surfaced at flush time, into "the copied file is
+    /// not the same size as the source", which tells the user nothing they can
+    /// act on.
+    static func isOutOfSpace(_ error: Error) -> Bool {
+        let nsError = error as NSError
+        if nsError.domain == NSCocoaErrorDomain, nsError.code == NSFileWriteOutOfSpaceError { return true }
+        if nsError.domain == NSPOSIXErrorDomain, nsError.code == Int(ENOSPC) { return true }
+        if let posix = error as? POSIXError, posix.code == .ENOSPC { return true }
+        // Cocoa wraps the underlying POSIX error rather than translating it.
+        if let underlying = nsError.userInfo[NSUnderlyingErrorKey] as? NSError {
+            return isOutOfSpace(underlying)
+        }
+        return false
     }
 
     static let defaultChunkSize = 4 * 1024 * 1024
@@ -147,10 +171,14 @@ enum ChunkedCopy {
             do {
                 try output.write(contentsOf: chunk)
             } catch {
+                let outOfSpace = Self.isOutOfSpace(error)
                 try? manager.removeItem(at: destination)
-                // A full or vanished volume both surface here.
-                throw control() == .driveGone
-                    ? Failure.driveGone
+                // A full or vanished volume both surface here, and they need
+                // different words: one is "free some space", the other is
+                // "plug it back in".
+                if control() == .driveGone { throw Failure.driveGone }
+                throw outOfSpace
+                    ? Failure.driveFull(bytesWritten: written)
                     : Failure.io("Writing to the drive failed: \(error.localizedDescription)")
             }
             written += Int64(chunk.count)
@@ -160,8 +188,12 @@ enum ChunkedCopy {
         do {
             try output.synchronize()
         } catch {
+            let outOfSpace = Self.isOutOfSpace(error)
             try? manager.removeItem(at: destination)
-            throw Failure.io("The copy could not be flushed to the drive: \(error.localizedDescription)")
+            // Where a buffered write hides a full disk until the very end.
+            throw outOfSpace
+                ? Failure.driveFull(bytesWritten: written)
+                : Failure.io("The copy could not be flushed to the drive: \(error.localizedDescription)")
         }
     }
 }

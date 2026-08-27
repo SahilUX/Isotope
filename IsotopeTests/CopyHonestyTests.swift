@@ -80,6 +80,46 @@ final class CopyHonestyTests: XCTestCase {
         XCTAssertEqual(TestFiles.size(destination), 128 * 1024)
     }
 
+    // MARK: - A full drive, named (PRD F68)
+
+    func testAFullVolumeIsRecognisedHoweverItArrives() {
+        // FileHandle reports it as Cocoa, a raw flush as POSIX, and Cocoa
+        // sometimes only wraps the POSIX one.
+        XCTAssertTrue(ChunkedCopy.isOutOfSpace(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteOutOfSpaceError)))
+        XCTAssertTrue(ChunkedCopy.isOutOfSpace(
+            NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))))
+        XCTAssertTrue(ChunkedCopy.isOutOfSpace(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteUnknownError, userInfo: [
+                NSUnderlyingErrorKey: NSError(domain: NSPOSIXErrorDomain, code: Int(ENOSPC))
+            ])))
+        // And nothing else is mistaken for it — "the drive filled up" is a
+        // claim, not a shrug.
+        XCTAssertFalse(ChunkedCopy.isOutOfSpace(
+            NSError(domain: NSPOSIXErrorDomain, code: Int(EIO))))
+        XCTAssertFalse(ChunkedCopy.isOutOfSpace(
+            NSError(domain: NSCocoaErrorDomain, code: NSFileWriteNoPermissionError)))
+    }
+
+    func testAShortCopySaysTheDriveFilledUp() {
+        // What the user actually saw was "The copied file is not the same size
+        // as the source. It was discarded; try again." — after twelve minutes.
+        let message = UpdateEngine.shortCopyMessage(copied: 8_410_000_000,
+                                                    expected: 8_471_603_200,
+                                                    driveName: "Ventoy")
+        XCTAssertTrue(message.contains("8.41 GB"), message)
+        XCTAssertTrue(message.contains("8.47 GB"), message)
+        XCTAssertTrue(message.contains("filled up"), message)
+        XCTAssertTrue(message.contains("Ventoy"), message)
+    }
+
+    func testACopyThatCameOutLongIsNotBlamedOnSpace() {
+        let message = UpdateEngine.shortCopyMessage(copied: 9_000_000_000,
+                                                    expected: 8_471_603_200,
+                                                    driveName: "Ventoy")
+        XCTAssertFalse(message.contains("filled up"), message)
+    }
+
     // MARK: - Saying the same number twice
 
     func testTheRowSpellsOutThePercentage() {

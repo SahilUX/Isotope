@@ -267,3 +267,21 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 - **F66** **The flush is part of the copy, and says so.** `ChunkedCopy` announces the final `synchronize()` so the operation switches to "Finishing" rather than sitting at 100% under "Copying to drive".
 
 - **F67** **The two progress bars quote the same number.** Activity's bar is the width of the window and the drive row's is 70 points, so an identical 10% looked like two different amounts of progress. Both rows now spell the percentage out beside the phase ("Copying to drive · 10%").
+
+## 24. v1.11.1 addendum — when the drive fills up, say so (2026-08-27)
+
+Measured on the reporting user's own stick, 256 MB written twice:
+
+| | apparent rate | true rate | final flush |
+|---|---|---|---|
+| buffered (before F65) | 11,249 MB/s | 11.7 MB/s | 22.8 s |
+| `F_NOCACHE` (after) | 8.1 MB/s | 8.1 MB/s | 0.0 s |
+
+The same copy, told two different ways. Scaled to an 8.47 GB ISO, that 22.8 s flush is roughly twelve minutes of an app that appears to have hung at 100%.
+
+- **F68** **A full drive is named, not paraphrased.** The copy that prompted this ran for twelve minutes and then failed with *"The copied file is not the same size as the source. It was discarded; try again."* — a symptom, offered as a diagnosis, after twelve minutes of waiting. What actually happened is that the volume filled up: an 8.47 GB ISO onto a stick with barely 8.5 GB free.
+  - `ChunkedCopy` recognises out-of-space in all three shapes it arrives in (Cocoa's `NSFileWriteOutOfSpaceError`, a bare POSIX `ENOSPC`, and a Cocoa error merely wrapping one) and reports `driveFull`, which the engine turns into the existing "does not have room" error with the shortfall the copy actually discovered.
+  - The size check that catches everything else now says which figure it got and which it wanted, and that a short file means the drive filled up.
+  - With `F_NOCACHE` (F65) this surfaces on the write that will not fit rather than at the flush twelve minutes later.
+
+- **F69** **A wider margin for large images.** The pre-flight allowed that copy: 64 MB of headroom against 8.47 GB is 0.75%, and free space on exFAT is not accurate to 0.75% — cluster rounding, directory growth and the allocation table all live inside that. Large transfers now reserve 1% (85 MB for this ISO), which turns a twelve-minute failure into an instant, accurate refusal. Small transfers keep 5% of themselves, unchanged.
