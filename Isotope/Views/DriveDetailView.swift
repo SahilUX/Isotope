@@ -447,6 +447,17 @@ private struct AssignmentRow: View {
             .channel(id: assignment.channelID)?.provider.mechanism == .windowsManual
     }
 
+    /// PRD F70: an up-to-date Windows row whose media build trails the current
+    /// serviced build is still up to date — it holds what Microsoft serves. The
+    /// gap is worth explaining, in a tooltip, rather than worth a status of its
+    /// own that would never clear.
+    private var upToDateHelp: String {
+        guard let installed = assignment.installed?.build,
+              let latest = store.release(for: assignment)?.build,
+              installed != latest else { return "This is the latest release" }
+        return "This is the media the publisher is serving (build \(installed)). The current serviced build is \(latest), which ships through Windows Update rather than in the ISO."
+    }
+
     /// PRD F46 amendment: `buildBehind` is not counted as an update — nothing
     /// downloadable is known to be newer — but it must still be *actionable*.
     /// Showing the state and then withholding the button left the user looking
@@ -507,6 +518,7 @@ private struct AssignmentRow: View {
             EmptyView()
         case .upToDate:
             Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
+                .help(upToDateHelp)
         case .buildBehind:
             // Not an update: Microsoft services Windows monthly but reissues
             // the ISO rarely, so a newer build may not be downloadable at all.

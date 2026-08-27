@@ -149,11 +149,40 @@ final class WindowsMediaTests: XCTestCase {
         XCTAssertEqual(staleness, .stale)
     }
 
-    func testTheBuildStillSurfacesWhenTheRevisionMatches() {
+    func testHoldingTheCurrentMediaIsSimplyUpToDate() {
+        // PRD F70. The drive has the media Microsoft is serving — v2 against v2
+        // — and the build inside it trails the serviced build, as it always
+        // will: servicing ships through Windows Update, not in the ISO. Calling
+        // that "Newer build shipped" made every Windows row say so forever,
+        // next to a button that re-downloads the identical file.
         let staleness = Staleness.evaluate(
             assignment: assignment(fileName: "Win11_25H2_English_x64v2.iso", build: "26200.6584"),
             latest: release(revision: 2, build: "26200.9168"))
+        XCTAssertEqual(staleness, .upToDate)
+        XCTAssertFalse(staleness.needsUpdate)
+    }
+
+    func testTheBuildStillSpeaksWhenTheRevisionCannot() {
+        // Media that is not named the way Microsoft names it has no revision to
+        // compare, so a newer build is the only hint that newer media exists.
+        let staleness = Staleness.evaluate(
+            assignment: assignment(fileName: "my-windows-copy.iso", build: "26200.6584"),
+            latest: release(revision: 2, build: "26200.9168"))
         XCTAssertEqual(staleness, .buildBehind)
+    }
+
+    func testAnUnknownServedRevisionLeavesTheBuildAsTheOnlySignal() {
+        let staleness = Staleness.evaluate(
+            assignment: assignment(fileName: "Win11_25H2_English_x64v2.iso", build: "26200.6584"),
+            latest: release(revision: nil, build: "26200.9168"))
+        XCTAssertEqual(staleness, .buildBehind)
+    }
+
+    func testMediaAheadOfTheServedRevisionIsUpToDate() {
+        let staleness = Staleness.evaluate(
+            assignment: assignment(fileName: "Win11_25H2_English_x64v3.iso", build: "26200.6584"),
+            latest: release(revision: 2, build: "26200.9168"))
+        XCTAssertEqual(staleness, .upToDate)
     }
 
     func testAnOlderReleaseIsStaleWhateverTheRevisions() {

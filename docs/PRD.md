@@ -1,4 +1,4 @@
-# Product Requirements Document — Isotope
+# Product Requirements Document: Isotope
 
 **Version:** 1.0 (draft for approval)
 **Depends on:** BRD.md (scope), DESIGN.md (technical design)
@@ -9,11 +9,11 @@ Isotope is a windowed native macOS app (SwiftUI) that manages a set of registere
 
 ## 2. Core concepts
 
-- **Catalog entry** — a trackable ISO source: e.g. "Ubuntu Desktop LTS", "Fedora Workstation", "SystemRescue", or a user-created custom source. Knows how to answer: *what is the latest version, where is the ISO, what is its SHA-256?*
-- **Channel** — a variant within an entry where relevant (Ubuntu: *LTS* vs *Latest*; Debian: *netinst* vs *DVD*).
-- **Release** — a concrete resolved version: version string, ISO URL, file size, SHA-256 (when available), release date.
-- **Managed drive** — a registered USB volume (identified by volume UUID) with a list of **assignments**.
-- **Assignment** — (drive, catalog entry, channel) plus what's currently installed: filename and version.
+- **Catalog entry.** A trackable ISO source, e.g. "Ubuntu Desktop LTS", "Fedora Workstation", "SystemRescue", or a user-created custom source. Knows how to answer: *what is the latest version, where is the ISO, what is its SHA-256?*
+- **Channel.** A variant within an entry where relevant (Ubuntu: *LTS* vs *Latest*; Debian: *netinst* vs *DVD*).
+- **Release.** A concrete resolved version: version string, ISO URL, file size, SHA-256 (when available), release date.
+- **Managed drive.** A registered USB volume, identified by volume UUID, with a list of assignments.
+- **Assignment.** A (drive, catalog entry, channel) triple plus what's currently installed: filename and version.
 
 ## 3. User stories
 
@@ -22,7 +22,7 @@ Isotope is a windowed native macOS app (SwiftUI) that manages a set of registere
 3. When I plug in a registered drive and an update is known, I get a macOS notification; clicking it opens the app ready to update.
 4. I confirm; the app downloads the ISO (resumable, verified), copies it to the drive, removes the old one, and tells me when it's safe to eject.
 5. I add a custom source for an ISO the catalog doesn't know, picking one of the supported detection mechanisms, and it behaves like a built-in entry.
-6. I remove a drive or an assignment at any time; the app never touches files it didn't place (except the specific old ISO it's replacing, with confirmation).
+6. I remove a drive or an assignment at any time; the app never touches files it didn't place, except the specific old ISO it's replacing, with confirmation.
 
 ## 4. Functional requirements
 
@@ -39,7 +39,7 @@ Isotope is a windowed native macOS app (SwiftUI) that manages a set of registere
 - **F8** Built-in catalog (data-driven, bundled JSON) covering at minimum:
   - **Linux:** Ubuntu Desktop (LTS + Latest channels), Fedora Workstation, Debian (netinst + DVD), Arch, Linux Mint (Cinnamon), openSUSE Leap, Pop!_OS.
   - **Tools/rescue:** SystemRescue, GParted Live, Clonezilla Live, Memtest86+, Tails.
-  - **Windows:** Windows 11 (and Windows 10 while Microsoft publishes it) — see §5.4 for the download caveat.
+  - **Windows:** Windows 11 (and Windows 10 while Microsoft publishes it). See §5.4 for the download caveat.
 - **F9** Each built-in entry shows: name, logo/glyph, channels, latest known version, release date, ISO size, link to project page.
 - **F10** User can create, edit, delete **custom sources** (§5) with a "Test" button that runs the check immediately and shows the parsed result before saving.
 - **F11** Assignments reference catalog entries; deleting a custom source warns if assigned anywhere.
@@ -64,25 +64,25 @@ Isotope is a windowed native macOS app (SwiftUI) that manages a set of registere
 - **F24** Activity view: current downloads/copies with progress, plus a persistent history log (what was updated, when, on which drive).
 - **F25** All failures produce actionable messages (e.g. "Checksum mismatch — the download was corrupted or the source's checksum file is stale. The file was discarded; try again.") and never leave a half-copied ISO on the drive (copy to temp name, rename on completion).
 
-## 5. Custom sources — how version detection works
+## 5. Custom sources: how version detection works
 
-The open question from planning: *"maybe .iso urls? but how would we know what version it is?"* — answered by offering four mechanisms; the user picks one per custom source. Each built-in catalog entry internally uses the same mechanisms, so custom sources are first-class.
+The open question from planning was *"maybe .iso urls? but how would we know what version it is?"* The answer is four mechanisms; the user picks one per custom source. Each built-in catalog entry internally uses the same mechanisms, so custom sources are first-class.
 
 ### 5.1 Checksum-file watch (recommended when available)
 User supplies the URL of a `SHA256SUMS`-style file (nearly every distro publishes one at a stable URL, e.g. `.../current/SHA256SUMS`) plus a filename-match regex with a version capture group.
-The app fetches the small text file, finds the matching line → gets **filename, version (from capture group), and SHA-256** in one request. Cheapest and most reliable; verification comes free.
+The app fetches the small text file and finds the matching line, which yields filename, version (from the capture group), and SHA-256 in one request. Cheapest and most reliable; verification comes free.
 
 ### 5.2 GitHub Releases
 User supplies `owner/repo` + an asset-name regex. The app uses the GitHub Releases API: version = release tag, ISO URL = matching asset, checksum = sibling `.sha256`/checksum asset if present.
 
 ### 5.3 Static URL + change detection
-User supplies a direct `.iso` URL that stays constant but whose content changes (e.g. `.../latest/foo.iso`). The app sends a `HEAD` request and compares `ETag` / `Last-Modified` / `Content-Length`. There is no semantic version — the app displays the version as the change date ("updated 2026-08-02") and flags staleness when the header changes. No published checksum → downloads marked unverified (F21) unless the user also provides a checksum URL.
+User supplies a direct `.iso` URL that stays constant but whose content changes (e.g. `.../latest/foo.iso`). The app sends a `HEAD` request and compares `ETag` / `Last-Modified` / `Content-Length`. There is no semantic version, so the app displays the version as the change date ("updated 2026-08-02") and flags staleness when the header changes. With no published checksum, downloads are marked unverified (F21) unless the user also provides a checksum URL.
 
 ### 5.4 Page/directory scrape
-User supplies a listing or download-page URL + a link-match regex with a version capture group (e.g. matching `ubuntu-(\d+\.\d+(\.\d+)?)-desktop-amd64\.iso`). The app parses anchors from the HTML, picks the highest version. Most fragile; the "Test" button (F10) makes the regex debuggable at creation time.
+User supplies a listing or download-page URL + a link-match regex with a version capture group (e.g. matching `ubuntu-(\d+\.\d+(\.\d+)?)-desktop-amd64\.iso`). The app parses anchors from the HTML and picks the highest version. Most fragile; the "Test" button (F10) makes the regex debuggable at creation time.
 
 ### Windows caveat
-Microsoft's ISO download links are session-generated and expire; stable hotlinks don't exist. v1 behavior: the Windows entry **tracks** the latest build (via Microsoft's public release info) and shows staleness like any entry, but "Update" opens the official download page in the browser with instructions; once the user's download lands in a watched folder (~/Downloads), the app offers to verify (hash shown for manual comparison) and place it on the drive. Fully-automated fetch (Fido-style API dance) is a stretch goal, not a commitment.
+Microsoft's ISO download links are session-generated and expire; stable hotlinks don't exist. v1 behavior: the Windows entry **tracks** the latest build (via Microsoft's public release info) and shows staleness like any entry, but "Update" opens the official download page in the browser with instructions. Once the user's download lands in a watched folder (~/Downloads), the app offers to verify it (hash shown for manual comparison) and place it on the drive. Fully-automated fetch (Fido-style API dance) is a stretch goal, not a commitment.
 
 ## 6. Non-functional requirements
 
@@ -102,51 +102,51 @@ Microsoft's ISO download links are session-generated and expire; stable hotlinks
 4. Add a custom source (SystemRescue via checksum-file watch) with Test → assign → behaves identically.
 5. Quit, relaunch, replug drive later after a new release → notification arrives → flow repeats.
 
-## 8. v1.1 addendum — flashed drives (approved 2026-08-17)
+## 8. v1.1 addendum: flashed drives (approved 2026-08-17)
 
 A **flashed drive** is a USB stick whose entire device is an ISO image (balenaEtcher-style), as opposed to a Ventoy drive holding ISO files. Updating one means re-imaging the whole device.
 
 ### Functional requirements
 - **F26** A managed drive has a kind: `ventoy` (existing behavior) or `flashed`. Chosen at registration; a flashed drive has exactly **one** assignment.
-- **F27** Flashed drives are identified by **hardware identity** (USB vendor/product/serial via IOKit), not volume UUID — flashing destroys and recreates the volume, so volume UUID cannot be the key. Volume UUID is re-recorded after each flash for informational display.
+- **F27** Flashed drives are identified by **hardware identity** (USB vendor/product/serial via IOKit), not volume UUID. Flashing destroys and recreates the volume, so volume UUID cannot be the key. Volume UUID is re-recorded after each flash for informational display.
 - **F28** Registration of a flashed drive: pick the physical device from a list of eligible external USB disks (name, size, current volume label); no folder/bookmark involved.
-- **F29** Flash pipeline: download+verify ISO to cache (identical to F18) → safety gates (device is external, removable, USB-attached, not the boot/internal disk, still present, size ≥ ISO) → explicit confirmation dialog stating the device name/size and that **all data on it will be erased** → `diskutil unmountDisk` → open `/dev/rdiskN` write handle via `/usr/libexec/authopen` (macOS admin password prompt, per flash, no stored privileges) → stream-write in chunks with progress/speed/ETA → **read-back verification** (re-read written range, compare SHA-256; default on, Settings toggle) → eject or remount → update drive record (new volume UUID, installed version) → history entry.
+- **F29** Flash pipeline, per PRD F18's shape: download+verify ISO to cache (identical to F18) → safety gates (device is external, removable, USB-attached, not the boot/internal disk, still present, size ≥ ISO) → explicit confirmation dialog stating the device name/size and that **all data on it will be erased** → `diskutil unmountDisk` → open `/dev/rdiskN` write handle via `/usr/libexec/authopen` (macOS admin password prompt, per flash, no stored privileges) → stream-write in chunks with progress/speed/ETA → read-back verification (re-read written range, compare SHA-256; default on, Settings toggle) → eject or remount → update drive record (new volume UUID, installed version) → history entry.
 - **F30** Staleness/notification/confirmation semantics are identical to Ventoy drives (F16/F17); the confirmation is never skipped for flashing regardless of any future auto-update setting.
 - **F31** Safety: the app must refuse to flash any device that fails a safety gate, with the specific reason; a mid-flash device disappearance fails cleanly with an actionable message; the app never flashes without the F29 confirmation in the same session.
-- **F32** Windows ISOs and any entry with no direct ISO (`windowsManual`) are **not flashable** — assignment pickers for flashed drives exclude them (plain dd of a Windows ISO does not produce a bootable stick).
+- **F32** Windows ISOs and any entry with no direct ISO (`windowsManual`) are **not flashable**. Assignment pickers for flashed drives exclude them, because a plain dd of a Windows ISO does not produce a bootable stick.
 
 ### Consequence for the app
-- The App Sandbox is removed (raw device access is incompatible with it). Security-scoped bookmark code remains but is no longer load-bearing. Distribution stays personal (Developer ID / from source).
+- The App Sandbox is removed, since raw device access is incompatible with it. Security-scoped bookmark code remains but is no longer required. Distribution stays personal (Developer ID / from source).
 
-## 9. v1.2 addendum — per-assignment update policy (approved 2026-08-17)
+## 9. v1.2 addendum: per-assignment update policy (approved 2026-08-17)
 
 Lets some ISOs on a drive stay put while others track the latest release, including multiple versions of the same OS coexisting on one Ventoy drive.
 
 - **F33** Each assignment has an **update policy**: `trackLatest` (default, existing behavior) or `keepAsIs` (pinned: never counted as stale, never updated, its file never touched; shown with a "Pinned" badge and its installed version).
 - **F34** A drive may hold **multiple assignments of the same entry+channel** provided at most one of them is `trackLatest` (duplicate prevention relaxes accordingly). Reconcile must keep matching each assignment to its own recorded filename and never attribute one file to two assignments.
-- **F35** In the update confirmation, each replaced ISO offers **"Keep current version on the drive as a pinned copy"** — instead of deleting the old file, the app converts it into a new `keepAsIs` assignment. This is the primary way multiple versions of one OS accumulate deliberately.
+- **F35** In the update confirmation, each replaced ISO offers **"Keep current version on the drive as a pinned copy"**. Instead of deleting the old file, the app converts it into a new `keepAsIs` assignment. This is the primary way multiple versions of one OS accumulate deliberately.
 - **F36** "Update All", staleness counts, and drive-connect notifications consider only `trackLatest` assignments. Switching a pinned assignment back to `trackLatest` re-evaluates staleness normally.
 - **F37** Flashed drives support the policy too (`keepAsIs` = never prompts to reflash); the single-assignment invariant is unchanged.
 
-## 10. v1.3 addendum — catalog expansion, grouping, flash auto-detect (approved 2026-08-17)
+## 10. v1.3 addendum: catalog expansion, grouping, flash auto-detect (approved 2026-08-17)
 
 - **F38** Catalog entries gain an **organization/family** (e.g. "Microsoft", "Ubuntu", "Linux Mint", "Fedora", "Arch", "Debian", "Tools & rescue"); the Catalog view groups by it. Flavours are entries within their family (Kubuntu under Ubuntu).
-- **F39** Catalog expansion (every URL live-verified at build time, same rules as F8/F13): **Proxmox VE**; **Windows 10** (if Microsoft still publishes ISOs post-EOL — otherwise the entry states that honestly); **Ubuntu flavours** (Kubuntu, Xubuntu, Lubuntu, Ubuntu MATE); and a researched set of other major current distros (candidates: Kali, Manjaro, EndeavourOS, Zorin, elementary, MX Linux, Rocky, AlmaLinux, NixOS, openSUSE Tumbleweed — include those with stable machine-readable sources, note any excluded and why).
-- **F40** **Flashed-USB auto-detect**: dd-flashed sticks retain their ISO's volume label. Entries may carry a `volumeLabelPattern` (regex, version capture group 1). During flashed-drive registration, the device list shows what each stick appears to contain and preselects the matching entry + installed version. On attach of a registered flashed drive whose label no longer matches its record (re-flashed elsewhere), update the installed version when parseable, else flag "contents changed". No admin privileges required (labels come from DiskArbitration; no raw reads).
+- **F39** Catalog expansion (every URL live-verified at build time, same rules as F8/F13): **Proxmox VE**; **Windows 10** (if Microsoft still publishes ISOs post-EOL, otherwise the entry states that honestly); **Ubuntu flavours** (Kubuntu, Xubuntu, Lubuntu, Ubuntu MATE); and a researched set of other major current distros (candidates: Kali, Manjaro, EndeavourOS, Zorin, elementary, MX Linux, Rocky, AlmaLinux, NixOS, openSUSE Tumbleweed. Include those with stable machine-readable sources, note any excluded and why).
+- **F40** **Flashed-USB auto-detect**: dd-flashed sticks retain their ISO's volume label. Entries may carry a `volumeLabelPattern` (regex, version capture group 1). During flashed-drive registration, the device list shows what each stick appears to contain and preselects the matching entry + installed version. On attach of a registered flashed drive whose label no longer matches its record (re-flashed elsewhere), update the installed version when parseable, else flag "contents changed". No admin privileges required, since labels come from DiskArbitration and no raw reads happen.
 
-## 11. v1.4 addendum — Ventoy content auto-detect + status-dot fix (2026-08-17)
+## 11. v1.4 addendum: Ventoy content auto-detect + status-dot fix (2026-08-17)
 
 - **F41** Ventoy scan auto-detect: unknown `.iso` files found on a registered Ventoy drive are matched against the catalog's filename patterns (same machinery as reconcile pass 2, across ALL entries, not just assigned ones). Recognized files are offered in the drive detail as "Found on drive: Ubuntu 24.04.1 — Track it?" with one-click assignment creation (policy chosen by the user: track latest, or keep-as-is pinned at the detected version). Unrecognized files remain listed informationally. Never auto-create assignments silently.
-- **F42** Sidebar status dot (bug fix, refines DESIGN §5): grey strictly means *not connected*. A connected drive shows: orange when ≥1 tracked assignment is stale, green when connected and no tracked assignment is stale (including all-pinned or not-yet-checked states — with a "checking/unknown" affinity indicator acceptable but never grey while connected).
+- **F42** Sidebar status dot (bug fix, refines DESIGN §5): grey strictly means *not connected*. A connected drive shows orange when ≥1 tracked assignment is stale, and green when connected with no tracked assignment stale, including all-pinned or not-yet-checked states. A "checking/unknown" affinity indicator is acceptable, but never grey while connected.
 
-## 12. v1.5 addendum — version detection for Windows and flashed drives (2026-08-18)
+## 12. v1.5 addendum: version detection for Windows and flashed drives (2026-08-18)
 
 Both fix "Unknown" staleness where a real comparison is possible.
 
 - **F43** Windows entries track the **feature release** (22H2, 25H2), not the build number: that is the identity a bootable install ISO actually carries, and it is what Microsoft's filenames encode. `VersionToken` gains parsing for `NNHN` tokens so `25H2 > 22H2` compares correctly; the build number (19045.7663) stays as display detail only. Filename patterns capture the release token, so an adopted `Win11_25H2_English_x64_v2.iso` compares equal to the latest release.
-- **F44** Flashed-drive **content probe**: after a flashed drive mounts, the app may read small marker files from the mounted (read-only) volume to determine the installed version — e.g. `/.disk/info` on Debian-derived images (Proxmox VE, Debian, Ubuntu), `/.treeinfo` or `/media.repo` on Fedora-family images. Catalog entries carry an optional ordered list of (path, regex with version capture). Read-only, no admin rights, no raw device access; failure is silent and falls back to the volume label (F40). Applies to Ventoy-hosted detection only where a file is genuinely readable — the probe is for flashed drives.
+- **F44** Flashed-drive **content probe**: after a flashed drive mounts, the app may read small marker files from the mounted (read-only) volume to determine the installed version, e.g. `/.disk/info` on Debian-derived images (Proxmox VE, Debian, Ubuntu), `/.treeinfo` or `/media.repo` on Fedora-family images. Catalog entries carry an optional ordered list of (path, regex with version capture). Read-only, no admin rights, no raw device access; failure is silent and falls back to the volume label (F40). Applies to Ventoy-hosted detection only where a file is genuinely readable, since the probe is for flashed drives.
 
-## 13. v1.6 addendum — catalog width and exact Windows builds (2026-08-20)
+## 13. v1.6 addendum: catalog width and exact Windows builds (2026-08-20)
 
 Both address the same complaint: the app knows less than the drive does.
 
@@ -156,13 +156,13 @@ Both address the same complaint: the app knows less than the drive does.
 
 - **F46** **Windows media reports its exact build.** F43 was right that the *comparable* identity is the feature release, but it left the row reading "25H2 → 25H2 (build 26200.9168)", which says nothing about the ISO on the drive: Microsoft reissues media under the same filename, so `Win11_25H2_English_x64.iso` may be any build of 25H2.
 
-  Isotope now reads the build out of the image itself — the `<BUILD>`/`<SPBUILD>` pair in the XML resource of `sources/install.wim` (or `.esd`/`.swm`) — by mounting the ISO read-only. No administrator rights, no writes, and no guessing: an image that will not say is displayed as it was before. Both sides of the row then carry a build, and the comparison gains one state:
+  Isotope now reads the build out of the image itself, the `<BUILD>`/`<SPBUILD>` pair in the XML resource of `sources/install.wim` (or `.esd`/`.swm`), by mounting the ISO read-only. No administrator rights, no writes, and no guessing: an image that will not say is displayed as it was before. Both sides of the row then carry a build, and the comparison gains one state:
 
-  - **`buildBehind`** — same feature release, older build on the drive. Displayed ("Newer build shipped"), and deliberately **not** counted as an update: Microsoft services Windows monthly but refreshes the download rarely, so a newer build often cannot be downloaded at all, and prompting for it would send the user to fetch the file they already have.
+  - **`buildBehind`.** Same feature release, older build on the drive. Displayed ("Newer build shipped"), and deliberately **not** counted as an update. Microsoft services Windows monthly but refreshes the download rarely, so a newer build often cannot be downloaded at all, and prompting for it would send the user to fetch the file they already have.
 
   Mounting a multi-gigabyte image is slow, so it runs after the scan, off the main actor, once per (assignment, file); a reconnect retries anything that could not be read.
 
-## 14. v1.6.1 addendum — the cache stops hoarding (2026-08-21)
+## 14. v1.6.1 addendum: the cache stops hoarding (2026-08-21)
 
 - **F47** **Delete a downloaded ISO once it is on the drive.** F20 gave the cache a 20 GB LRU cap, which means it happily sits at 19 GB of ISOs the user is already carrying on a USB stick. The cache exists to save a *second* download, not to keep a second copy of everything.
 
@@ -173,48 +173,48 @@ Both address the same complaint: the app knows less than the drive does.
   - **Another queued operation needs the same ISO.** "Update All" across two sticks holding the same distro deletes only after the last one has it.
   - **The operation failed.** A failed copy or flash keeps the download, so a retry does not mean fetching several gigabytes again.
 
-  Turning the setting off restores the F20 behaviour exactly: ISOs stay cached up to the limit. The reclaimed size is written into the history line ("…· freed 5.7 GB of cache") so the space going away is visible rather than mysterious. The Windows manual path is untouched — that file lives in the user's Downloads folder and is theirs, not Isotope's, to delete.
+  Turning the setting off restores the F20 behaviour exactly: ISOs stay cached up to the limit. The reclaimed size is written into the history line ("…· freed 5.7 GB of cache") so the space going away is visible rather than mysterious. The Windows manual path is untouched, because that file lives in the user's Downloads folder and is theirs, not Isotope's, to delete.
 
-## 15. v1.7 addendum — Windows media revisions, an opt-in download attempt (2026-08-26)
+## 15. v1.7 addendum: Windows media revisions, an opt-in download attempt (2026-08-26)
 
 Asked directly: can Windows be handled like Linux, without the manual download? The endpoints were tested against the live service before answering, and the answer is "partly, and here is exactly which part".
 
-- **F48** **Track the media revision.** Microsoft reissues the media for a feature release without changing the release: 25H2 has shipped as the original ISO and again as `25H2__V2`. Their download connector answers `getskuinformationbyproductedition` to *any* client — no login, no fingerprint, one plain GET — with a `ProductDisplayName` naming both. Their own filenames carry the same thing (`Win11_25H2_English_x64v2.iso`, the original having no suffix), so both sides of the comparison have it.
+- **F48** **Track the media revision.** Microsoft reissues the media for a feature release without changing the release: 25H2 has shipped as the original ISO and again as `25H2__V2`. Their download connector answers `getskuinformationbyproductedition` to *any* client, with no login, no fingerprint and one plain GET, and returns a `ProductDisplayName` naming both. Their own filenames carry the same thing (`Win11_25H2_English_x64v2.iso`, the original having no suffix), so both sides of the comparison have it.
 
-  A newer revision is therefore a **plain update** (`.stale`), not the advisory F46 introduced: unlike a servicing build, a reissue is genuinely downloadable today. Precedence, highest first: feature release → media revision → servicing build. Where the file is not named the way Microsoft names its media, no revision is claimed, and nothing is inferred.
+  A newer revision is therefore a **plain update** (`.stale`), not the advisory F46 introduced. Unlike a servicing build, a reissue is genuinely downloadable today. Precedence, highest first: feature release → media revision → servicing build. Where the file is not named the way Microsoft names its media, no revision is claimed, and nothing is inferred.
 
-- **F49** **Opt-in automatic download, honest about its odds.** The sibling call that mints a real download link (`GetProductDownloadLinksBySku`) is guarded: it answers `"Sentinel marked this request as rejected"` to anything that does not look like a browser session. That is measured, not assumed — it refused a correctly sequenced, correctly headed request from an ordinary residential connection, twice, during development.
+- **F49** **Opt-in automatic download, honest about its odds.** The sibling call that mints a real download link (`GetProductDownloadLinksBySku`) is guarded: it answers `"Sentinel marked this request as rejected"` to anything that does not look like a browser session. That is measured, not assumed. It refused a correctly sequenced, correctly headed request from an ordinary residential connection, twice, during development.
 
   So Isotope can *try*, behind a setting that is **off by default**. On, the hand-off sheet attempts the resolve and says which of the two things happened: "Microsoft answered — downloading …" or "Microsoft refused the automated request", with the manual steps right there underneath. A link that does come back carries its SHA-256, so a resolved download is verified like any other; the manual path is unchanged and remains the supported one.
 
-- **F50** **One request per URL per check.** The catalog now has 106 channels and many of them legitimately share a URL — 24 Ubuntu-family channels behind two `changelogs.ubuntu.com` index files, 16 Fedora channels behind one `releases.json`, Kali's five images and Debian Live's six each behind a single `SHA256SUMS`. Fanning out one request per *channel* earned an HTTP 429 and reported six Ubuntu flavours as failing when nothing was wrong with them. Requests are now coalesced per (method, URL, headers) — in-flight requests join, successful answers are reused for 120 s, failures never are — and a user-initiated check clears that memory first.
+- **F50** **One request per URL per check.** The catalog now has 106 channels and many of them legitimately share a URL: 24 Ubuntu-family channels behind two `changelogs.ubuntu.com` index files, 16 Fedora channels behind one `releases.json`, Kali's five images and Debian Live's six each behind a single `SHA256SUMS`. Fanning out one request per *channel* earned an HTTP 429 and reported six Ubuntu flavours as failing when nothing was wrong with them. Requests are now coalesced per (method, URL, headers), so in-flight requests join, successful answers are reused for 120 s, and failures never are. A user-initiated check clears that memory first.
 
-## 16. v1.7.1 addendum — Settings that respond, and a way to see F49 work (2026-08-26)
+## 16. v1.7.1 addendum: Settings that respond, and a way to see F49 work (2026-08-26)
 
 - **F51** **Settings controls reflect what they do.** Every toggle and picker in Settings wrote its value straight through to `UserDefaults` and then carried on drawing the old one: the value changed, SwiftUI was never told, and the control snapped back. Reported as "toggling makes no difference", which is precisely what it looked like. `AppSettings` becomes an observable reference type so a control redraws when its own value changes. Nothing about the storage or the defaults moves.
 
-- **F52** **"Test Now" for the Windows attempt (F49).** A setting whose whole point is that it may not work has to be able to say whether it works. Settings gains a **Test Now** button that runs the real attempt against the first Windows channel in the catalog — the same code path an update takes — and reports one of three outcomes, quoting Microsoft where they said anything:
-  - *Microsoft answered with a link* — with the filename and whether a checksum came with it.
-  - *Microsoft refused* — with their own words ("Sentinel marked this request as rejected."), and the note that downloads will use the browser instead.
-  - *The attempt could not be made* — a network failure or a changed response shape, told apart from a refusal.
+- **F52** **"Test Now" for the Windows attempt (F49).** A setting whose whole point is that it may not work has to be able to say whether it works. Settings gains a **Test Now** button that runs the real attempt against the first Windows channel in the catalog, the same code path an update takes, and reports one of three outcomes, quoting Microsoft where they said anything:
+  - *Microsoft answered with a link*, with the filename and whether a checksum came with it.
+  - *Microsoft refused*, with their own words ("Sentinel marked this request as rejected."), and the note that downloads will use the browser instead.
+  - *The attempt could not be made*, a network failure or a changed response shape, told apart from a refusal.
 
   It works with the setting off, because "does this work?" is the question you ask *before* deciding to turn it on. The hand-off sheet shows the same reason text instead of a bare "refused".
 
 - **F53** **The pin button shows its action, not its state**, and says it once. An unpinned row drew `pin.slash` while its tooltip offered "Pin this version"; a pinned row drew `pin.fill` while offering to unpin. The icons are swapped so the button says what pressing it does.
 
-  A pinned Ventoy row then said the same thing three times — "· kept as is" in the version line, a "Pinned" status label, and the button — so the status label is dropped for that state. The flashed-drive row keeps its label: there the pin control is a checkbox further down the panel, not an icon on the row, so the label is the only inline indicator.
+  A pinned Ventoy row then said the same thing three times, "· kept as is" in the version line, a "Pinned" status label, and the button, so the status label is dropped for that state. The flashed-drive row keeps its label: there the pin control is a checkbox further down the panel, not an icon on the row, so the label is the only inline indicator.
 
-## 17. v1.7.2 addendum — a build-behind row you can act on (2026-08-26)
+## 17. v1.7.2 addendum: a build-behind row you can act on (2026-08-26)
 
-- **F54** **`buildBehind` gets a button.** F46 was right that a newer servicing build is not a downloadable update and should not be counted as one — and then wrong about what to do next: the row showed "Newer build shipped" and offered no control at all, so the honest information became a dead end. The update button now appears for `buildBehind` as well as for `stale`. Nothing about the counting changes: it is still not in "N updates available", still not swept up by Update All, and still not a reason to notify.
+- **F54** **`buildBehind` gets a button.** F46 was right that a newer servicing build is not a downloadable update and should not be counted as one, and then wrong about what to do next: the row showed "Newer build shipped" and offered no control at all, so the honest information became a dead end. The update button now appears for `buildBehind` as well as for `stale`. Nothing about the counting changes: it is still not in "N updates available", still not swept up by Update All, and still not a reason to notify.
 
-- **F55a** **The pin sits at the trailing edge of every row.** Only some rows carry an update button, so with the pin in front of it the icon landed in a different place depending on the row's state — a column of pins that wandered left and right down the list. It is now last in the row, always, and lines up.
+- **F55a** **The pin sits at the trailing edge of every row.** Only some rows carry an update button, so with the pin in front of it the icon landed in a different place depending on the row's state, a column of pins that wandered left and right down the list. It is now last in the row, always, and lines up.
 
-- **F55** **Every updatable row can be updated on demand.** The row's context menu gains "Update Now" / "Get ISO…", enabled whenever the assignment is not pinned and a release is resolved. An up-to-date row, or one whose installed file could not be recognised, is not a row the user should have to argue with. Pinned assignments stay exactly as they were — PRD F33 outranks this, the file is off limits however the request arrives.
+- **F55** **Every updatable row can be updated on demand.** The row's context menu gains "Update Now" / "Get ISO…", enabled whenever the assignment is not pinned and a release is resolved. An up-to-date row, or one whose installed file could not be recognised, is not a row the user should have to argue with. Pinned assignments stay exactly as they were: PRD F33 outranks this, and the file is off limits however the request arrives.
 
-- **F56** **The Windows sheet says what the download will actually get you.** When release and media revision already match and only the build differs, the hand-off sheet states plainly that the newer build ships through Windows Update rather than in the ISO, so Microsoft's page will most likely return the same media — and that downloading it again is harmless, because Isotope reads the build out of whatever is saved. Without that line the version arrow ("26200.8037 → 26200.9168") quietly implies a newer ISO exists to be fetched.
+- **F56** **The Windows sheet says what the download will actually get you.** When release and media revision already match and only the build differs, the hand-off sheet states plainly that the newer build ships through Windows Update rather than in the ISO, so Microsoft's page will most likely return the same media, and that downloading it again is harmless, because Isotope reads the build out of whatever is saved. Without that line the version arrow ("26200.8037 → 26200.9168") quietly implies a newer ISO exists to be fetched.
 
-## 18. v1.7.3 addendum — the Downloads watch actually watches (2026-08-27)
+## 18. v1.7.3 addendum: the Downloads watch actually watches (2026-08-27)
 
 - **F57** **The watch uses the catalog's recognition pattern.** It built its own from the entry's *title* instead: "Windows 11" → `^Windows.*\.iso$`, which never matches Microsoft's own `Win11_25H2_English_x64_v2.iso`. The downloaded ISO sat in the folder while the sheet said "No matching ISO yet", and neither the poll nor Rescan could ever have found it. The catalog already carries the pattern that recognises this channel's media on a drive (F41); that is now the only thing consulted, so a name is defined in exactly one place.
 
@@ -222,13 +222,13 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 
 - **F59** **"Cannot read the folder" is not "your download has not arrived".** macOS gates access to Downloads, and a denied read looked exactly like an empty folder. The watch reports the difference, and the sheet says where to grant access.
 
-## 19. v1.8 addendum — sizes on the drive (2026-08-27)
+## 19. v1.8 addendum: sizes on the drive (2026-08-27)
 
-- **F60** **Every ISO on a drive shows what it takes up.** A stick's free space was visible; where it had gone was not. Each tracked assignment now carries its file's size on the version line ("25H2 v2 (build 26200.8037) → … · 8.47 GB"), and the two informational lists — recognised-but-untracked ISOs and unrecognised files — carry theirs too.
+- **F60** **Every ISO on a drive shows what it takes up.** A stick's free space was visible; where it had gone was not. Each tracked assignment now carries its file's size on the version line ("25H2 v2 (build 26200.8037) → … · 8.47 GB"), and the two informational lists, recognised-but-untracked ISOs and unrecognised files, carry theirs too.
 
   Sizes are read during the scan that lists the folder, and held with the rest of the scan's transient output, so they cannot describe a file the drive no longer has. A folder that cannot be read yields no sizes rather than an error: a size is a nicety, and it must never be the reason a scan fails or a row shows "Zero KB".
 
-## 20. v1.8.1 addendum — replacing a file that shares its name (2026-08-27)
+## 20. v1.8.1 addendum: replacing a file that shares its name (2026-08-27)
 
 - **F61** **The pre-flight counts the file it is about to replace, whatever it is called.** A Ventoy stick with 589 MB free, holding an 8.47 GB Windows ISO, refused to place the same media again: *"does not have room — it is 7.95 GB short, even after removing the version being replaced"*. The message named the very file whose bytes it had declined to count.
 
@@ -238,37 +238,37 @@ Asked directly: can Windows be handled like Linux, without the manual download? 
 
   Reading the second rule into the first left a same-named replacement with nothing reclaimable and a shortfall equal to its own size. The two are now derived separately, and `requiresReclaimFirst` (F18) deletes the outgoing file before the copy in this case, exactly as it already did for a differently named one.
 
-  Unchanged, deliberately: a drive set to **keep old versions**, or an item the user asked to **keep as a pinned copy** (F6/F35), still reserves room for both — those bytes are not Isotope's to spend, so such an update still fails honestly when the stick is too full.
+  Unchanged, deliberately: a drive set to **keep old versions**, or an item the user asked to **keep as a pinned copy** (F6/F35), still reserves room for both. Those bytes are not Isotope's to spend, so such an update still fails honestly when the stick is too full.
 
-## 21. v1.9 addendum — the app stays responsive while it copies (2026-08-27)
+## 21. v1.9 addendum: the app stays responsive while it copies (2026-08-27)
 
-- **F62** **A copy must not cost the main thread.** The app showed a spinning cursor and stopped answering while copying an ISO — though the copy itself was already running off the main actor. The main thread was busy elsewhere, and three things were feeding it:
+- **F62** **A copy must not cost the main thread.** The app showed a spinning cursor and stopped answering while copying an ISO, though the copy itself was already running off the main actor. The main thread was busy elsewhere, and three things were feeding it:
 
-  1. **Regexes were recompiled on every use.** Matching a drive's unclaimed files against the catalog compiled one `NSRegularExpression` per file per channel — measured at 9.7 ms per pass over the 106-channel catalog, and the drive view did two passes per redraw. Compiled patterns are now kept; a repeat is a lookup. (Measured: 9.7 ms → 1.7 ms.)
-  2. **The detection ran on every read.** `detectedISOs(on:)` recomputed the whole match each time a view asked, which is many times a second while a copy reports progress. It is computed once per scan — and once more when the catalog itself changes, so a new custom source still lights up a file already on the drive without waiting for a rescan.
+  1. **Regexes were recompiled on every use.** Matching a drive's unclaimed files against the catalog compiled one `NSRegularExpression` per file per channel, measured at 9.7 ms per pass over the 106-channel catalog, and the drive view did two passes per redraw. Compiled patterns are now kept; a repeat is a lookup. (Measured: 9.7 ms → 1.7 ms.)
+  2. **The detection ran on every read.** `detectedISOs(on:)` recomputed the whole match each time a view asked, which is many times a second while a copy reports progress. It is computed once per scan, and once more when the catalog itself changes, so a new custom source still lights up a file already on the drive without waiting for a rescan.
   3. **Every 4 MiB chunk redrew the UI.** Progress now reaches the interface at most ten times a second; the rate estimator still sees every chunk, and the final report is never dropped, so the bar still finishes where it should. The flash pipeline gets the same treatment.
 
   Net effect: a redraw during a copy does no pattern matching at all, and gets asked for far less often.
 
-## 22. v1.10 addendum — speed, time remaining, and clearing the download (2026-08-27)
+## 22. v1.10 addendum: speed, time remaining, and clearing the download (2026-08-27)
 
-- **F63** **Every transfer says how fast it is going and how long is left.** The measurements already existed — `TransferRateEstimator` feeds a rate and an ETA through every download, drive copy and flash — but only the Activity list printed them. The drive row, which is where a copy is actually watched, showed a bar and a phase name. Both drive rows (Ventoy and flashed) now carry "12.3 MB/s · 4 min left" under the phase, with the byte count in the tooltip, and all three surfaces format it through one helper so they cannot drift apart. Nothing is shown before the estimator has a usable reading — no "0 bytes/s" flicker at the start of a copy.
+- **F63** **Every transfer says how fast it is going and how long is left.** The measurements already existed: `TransferRateEstimator` feeds a rate and an ETA through every download, drive copy and flash, but only the Activity list printed them. The drive row, which is where a copy is actually watched, showed a bar and a phase name. Both drive rows (Ventoy and flashed) now carry "12.3 MB/s · 4 min left" under the phase, with the byte count in the tooltip, and all three surfaces format it through one helper so they cannot drift apart. Nothing is shown before the estimator has a usable reading, so there is no "0 bytes/s" flicker at the start of a copy.
 
 - **F64** **A hand-downloaded ISO can clear itself up.** Windows media is fetched by the user and lands in Downloads, where an 8.5 GB file then sits forever. New setting, **on by default**: once the ISO is on the drive, the download is moved to the **Trash**.
 
-  Deliberately the Trash and not deletion. The cache is Isotope's own and is deleted outright (F47); this is the user's file, in their own folder, and they may still want it for another machine — so the space comes back while the decision stays reversible. Two refusals: a file that lives on the drive itself is never touched (Choose File… can point at one, and trashing it would delete the image just placed), and a failure to trash is silent, because a file that could not be moved is not a failed update. The history line says where it went.
+  Deliberately the Trash and not deletion. The cache is Isotope's own and is deleted outright (F47); this is the user's file, in their own folder, and they may still want it for another machine, so the space comes back while the decision stays reversible. Two refusals: a file that lives on the drive itself is never touched (Choose File… can point at one, and trashing it would delete the image just placed), and a failure to trash is silent, because a file that could not be moved is not a failed update. The history line says where it went.
 
-## 23. v1.11 addendum — a progress display that is telling the truth (2026-08-27)
+## 23. v1.11 addendum: a progress display that is telling the truth (2026-08-27)
 
 - **F65** **The copy reports the device's speed, not the page cache's.** A copy to a Ventoy stick showed 81.5 MB/s, then 202.6 MB/s, with the ETA shortening as it went. Measured against the same drive at the same moment with `iostat`: the device was doing **10–17 MB/s**. macOS was absorbing the writes into RAM and returning immediately, so the figure on screen was the speed of memory. When the cache filled, the writes began blocking at the real rate and the estimate collapsed; the final `synchronize()` then sat at 100% for minutes draining the backlog, which is indistinguishable from a hang. (The app was caught in an uninterruptible I/O wait doing exactly that.)
 
-  Both ends of the copy now set `F_NOCACHE`, so each write waits for the device and the rate shown is the rate happening — from the first chunk, not after the illusion runs out. It also stops an 8 GB ISO from evicting everything else from the page cache on its way past. Total time is unchanged: the bytes were always going to take as long as they take.
+  Both ends of the copy now set `F_NOCACHE`, so each write waits for the device and the rate shown is the rate happening, from the first chunk, not after the illusion runs out. It also stops an 8 GB ISO from evicting everything else from the page cache on its way past. Total time is unchanged: the bytes were always going to take as long as they take.
 
 - **F66** **The flush is part of the copy, and says so.** `ChunkedCopy` announces the final `synchronize()` so the operation switches to "Finishing" rather than sitting at 100% under "Copying to drive".
 
 - **F67** **The two progress bars quote the same number.** Activity's bar is the width of the window and the drive row's is 70 points, so an identical 10% looked like two different amounts of progress. Both rows now spell the percentage out beside the phase ("Copying to drive · 10%").
 
-## 24. v1.11.1 addendum — when the drive fills up, say so (2026-08-27)
+## 24. v1.11.1 addendum: when the drive fills up, say so (2026-08-27)
 
 Measured on the reporting user's own stick, 256 MB written twice:
 
@@ -279,9 +279,21 @@ Measured on the reporting user's own stick, 256 MB written twice:
 
 The same copy, told two different ways. Scaled to an 8.47 GB ISO, that 22.8 s flush is roughly twelve minutes of an app that appears to have hung at 100%.
 
-- **F68** **A full drive is named, not paraphrased.** The copy that prompted this ran for twelve minutes and then failed with *"The copied file is not the same size as the source. It was discarded; try again."* — a symptom, offered as a diagnosis, after twelve minutes of waiting. What actually happened is that the volume filled up: an 8.47 GB ISO onto a stick with barely 8.5 GB free.
+- **F68** **A full drive is named, not paraphrased.** The copy that prompted this ran for twelve minutes and then failed with *"The copied file is not the same size as the source. It was discarded; try again."*, a symptom offered as a diagnosis after twelve minutes of waiting. What actually happened is that the volume filled up: an 8.47 GB ISO onto a stick with barely 8.5 GB free.
   - `ChunkedCopy` recognises out-of-space in all three shapes it arrives in (Cocoa's `NSFileWriteOutOfSpaceError`, a bare POSIX `ENOSPC`, and a Cocoa error merely wrapping one) and reports `driveFull`, which the engine turns into the existing "does not have room" error with the shortfall the copy actually discovered.
   - The size check that catches everything else now says which figure it got and which it wanted, and that a short file means the drive filled up.
   - With `F_NOCACHE` (F65) this surfaces on the write that will not fit rather than at the flush twelve minutes later.
 
-- **F69** **A wider margin for large images.** The pre-flight allowed that copy: 64 MB of headroom against 8.47 GB is 0.75%, and free space on exFAT is not accurate to 0.75% — cluster rounding, directory growth and the allocation table all live inside that. Large transfers now reserve 1% (85 MB for this ISO), which turns a twelve-minute failure into an instant, accurate refusal. Small transfers keep 5% of themselves, unchanged.
+- **F69** **A wider margin for large images.** The pre-flight allowed that copy: 64 MB of headroom against 8.47 GB is 0.75%, and free space on exFAT is not accurate to 0.75%. Cluster rounding, directory growth and the allocation table all live inside that. Large transfers now reserve 1% (85 MB for this ISO), which turns a twelve-minute failure into an instant, accurate refusal. Small transfers keep 5% of themselves, unchanged.
+
+## 25. v1.11.2 addendum — holding the current media is up to date (2026-08-27)
+
+- **F70** **A servicing build behind the media is not a state of the row.** After a Windows ISO was placed successfully, the row went on saying **"Newer build shipped"** with a "Get ISO…" button beside it. The drive held `Win11_25H2_English_x64_v2.iso` — exactly what Microsoft serves — and its build (26200.8037) trailed the current serviced build (26200.9168), as it always will: servicing ships through Windows Update, not in the ISO.
+
+  So the advisory could never clear, on any Windows row, ever — next to a button that would re-download the identical file, which on the reporting user's stick is a fourteen-minute round trip. That is worse than saying nothing.
+
+  The rule is now: **the media revision answers the question wherever it can.** Same release, same revision → up to date, full stop. The build is only raised where the revision cannot answer — media not named the way Microsoft names it, or a connector call that did not come back — because there a newer build is the one hint that newer media might exist. `buildBehind` survives for exactly that case.
+
+  The build gap has not been hidden: it is still on the version line, and the up-to-date tick now carries a tooltip saying which build the media holds, which build is current, and that the difference ships through Windows Update.
+
+  This is a correction to F46, which introduced `buildBehind` as an advisory, and to F54, which then gave it a button. Both were reasonable in isolation; together they produced a row that nagged forever about something no download could fix.

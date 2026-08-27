@@ -221,8 +221,11 @@ final class WindowsBuildDetectionTests: XCTestCase {
         store.addCustomEntry(windowsEntry)
         let drive = try store.registerDrive(at: url)
         store.addAssignment(entryID: "windows-11", channelID: "default", to: drive.id)
+        // PRD F70: the build is the only signal here — Microsoft's connector
+        // did not answer, so there is no media revision to compare and a newer
+        // build is the one hint that newer media might exist.
         store.setRelease(Release(version: .parse("25H2")!, fileName: "",
-                                 build: "26200.9168", mediaRevision: 2),
+                                 build: "26200.9168", mediaRevision: nil),
                          for: ReleaseKey(entryID: "windows-11", channelID: "default"))
         store.scanAndReconcile(driveID: drive.id)
         _ = await waitForBuild(on: store, driveID: drive.id)
@@ -245,7 +248,35 @@ final class WindowsBuildDetectionTests: XCTestCase {
         // And the sheet is told to say what the download will really get them.
         XCTAssertTrue(item.isBuildOnlyDifference)
         XCTAssertEqual(item.fromVersion, "25H2 v2 (build 26200.8037)")
-        XCTAssertEqual(item.toVersion, "25H2 v2 (build 26200.9168)")
+        // No revision came back from Microsoft in this fixture, so the latest
+        // side names the release and the build and claims no issue.
+        XCTAssertEqual(item.toVersion, "25H2 (build 26200.9168)")
+    }
+
+    func testHoldingTheServedMediaIsUpToDateEvenWithAnOlderBuild() async throws {
+        // PRD F70, the reported case: the ISO on the drive *is* what Microsoft
+        // serves (v2 against v2), and its build trails the serviced build as it
+        // always will. Reporting that as "Newer build shipped" beside a "Get
+        // ISO…" button meant every Windows row said so forever, and the button
+        // fetched the identical file.
+        let (url, info) = volume("/Volumes/VENTOY", uuid: "UUID-W")
+        let store = makeStore(volumes: [url: info],
+                              listing: ["Win11_25H2_English_x64_v2.iso"],
+                              builds: ["Win11_25H2_English_x64_v2.iso": "26200.8037"])
+        await store.loadAtLaunch()
+        store.addCustomEntry(windowsEntry)
+        let drive = try store.registerDrive(at: url)
+        store.addAssignment(entryID: "windows-11", channelID: "default", to: drive.id)
+        store.setRelease(Release(version: .parse("25H2")!, fileName: "",
+                                 build: "26200.9168", mediaRevision: 2),
+                         for: ReleaseKey(entryID: "windows-11", channelID: "default"))
+        store.scanAndReconcile(driveID: drive.id)
+        _ = await waitForBuild(on: store, driveID: drive.id)
+
+        let assignment = try XCTUnwrap(store.drive(id: drive.id)?.assignments.first)
+        XCTAssertEqual(assignment.installed?.build, "26200.8037")
+        XCTAssertEqual(store.staleness(of: assignment), .upToDate)
+        XCTAssertTrue(store.staleAssignments(on: try XCTUnwrap(store.drive(id: drive.id))).isEmpty)
     }
 
     func testAnUpToDateRowCanStillBeUpdatedOnDemand() async throws {

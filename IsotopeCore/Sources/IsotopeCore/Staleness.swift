@@ -53,10 +53,25 @@ public extension Staleness {
         // the release. Unlike a servicing build, a new issue *is* downloadable
         // today, so it is a plain update — the row says 25H2 → 25H2 v2 and the
         // usual "get this" flow applies.
-        if base == .upToDate, let installed, let latestRevision = latest?.mediaRevision,
-           let installedRevision = WindowsMediaName.revision(fromFileName: installed.fileName),
-           installedRevision < latestRevision {
+        let installedRevision = installed.flatMap { WindowsMediaName.revision(fromFileName: $0.fileName) }
+        if base == .upToDate, let latestRevision = latest?.mediaRevision,
+           let installedRevision, installedRevision < latestRevision {
             return .stale
+        }
+        // PRD F70: and once the revisions match, the drive holds the media
+        // Microsoft is serving — which is the most anyone can have. The build
+        // inside it will *always* trail the current serviced build, because
+        // servicing ships through Windows Update and not in the ISO, so
+        // reporting that gap as a state of the row means reporting it forever,
+        // beside a button that re-downloads the identical file.
+        //
+        // The build is only worth raising where the revision cannot answer:
+        // media that is not named the way Microsoft names it, so there is no
+        // revision to compare and a newer build is the only hint that newer
+        // media might exist.
+        if let installedRevision, let latestRevision = latest?.mediaRevision,
+           installedRevision >= latestRevision {
+            return base
         }
         // PRD F43 addendum: only once the releases are level does the build
         // become the finer question. Both sides must have one, read from

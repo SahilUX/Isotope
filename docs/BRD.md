@@ -1,4 +1,4 @@
-# Business Requirements Document — Isotope
+# Business Requirements Document: Isotope
 
 **Version:** 1.0 (draft for approval)
 **Date:** 2026-08-17
@@ -6,11 +6,11 @@
 
 ## 1. Background
 
-Bootable USB drives go stale. A Ventoy drive prepared six months ago carries Ubuntu 24.04.1 when 24.04.3 is out, an old Fedora, an outdated SystemRescue. Refreshing them today is manual: check each distro's website, download the ISO, verify the checksum (usually skipped), find the drive, replace the file. Multiply by several drives and a dozen ISOs and it stops happening — the drives are simply out of date when they're needed.
+Bootable USB drives go stale. A Ventoy drive prepared six months ago carries Ubuntu 24.04.1 when 24.04.3 is out, an old Fedora, an outdated SystemRescue. Refreshing them today is manual: check each distro's website, download the ISO, verify the checksum (usually skipped), find the drive, replace the file. Multiply by several drives and a dozen ISOs and it stops happening. The drives are out of date when they're needed.
 
 ## 2. Business objective
 
-A native macOS app that keeps registered USB drives' ISOs current with minimal effort: it knows which ISOs live on which drives, detects when newer versions are released, and — with one confirmation — downloads, verifies, and places the new ISO on the drive.
+A native macOS app that keeps registered USB drives' ISOs current with minimal effort. It knows which ISOs live on which drives, detects when newer versions are released, and, after one confirmation, downloads, verifies, and places the new ISO on the drive.
 
 ## 3. Goals & success criteria
 
@@ -31,25 +31,25 @@ A native macOS app that keeps registered USB drives' ISOs current with minimal e
 - Drive registration, per-drive ISO assignments, staleness dashboard.
 - Notify-then-confirm update flow; downloads with checksum verification.
 
-### In scope (v1.1 addendum — approved 2026-08-17 after v1 completion)
-- Raw flashing of drives (dd/balenaEtcher-style re-imaging) for single-ISO USB sticks. Consequence accepted: the app drops App Sandbox (personal distribution) and uses Apple's `authopen` for per-flash admin authorization — no root daemon installed. Read-back verification on by default.
+### In scope (v1.1 addendum, approved 2026-08-17 after v1 completion)
+- Raw flashing of drives (dd/balenaEtcher-style re-imaging) for single-ISO USB sticks. Consequence accepted: the app drops App Sandbox (personal distribution) and uses Apple's `authopen` for per-flash admin authorization, with no root daemon installed. Read-back verification on by default.
 
 ### Out of scope (v2 candidates)
-- Background agent / menu-bar presence — v1 is a regular windowed app; checks happen while it runs.
+- Background agent / menu-bar presence. v1 is a regular windowed app; checks happen while it runs.
 - Installing or upgrading Ventoy itself on a drive.
-- Fully automated Windows ISO download (session-gated by Microsoft; v1 does best-effort — see PRD §5.4).
+- Fully automated Windows ISO download, which Microsoft session-gates. v1 does best-effort, see PRD §5.4.
 - Multi-user / sync / any server component.
 
 ## 5. Stakeholders
 
-Single stakeholder: the user (owner-operator, technically expert). No compliance, licensing, or monetization requirements. Distribution is personal (built from source / Developer ID, not App Store — though the design stays App-Store-compatible where free).
+Single stakeholder: the user (owner-operator, technically expert). No compliance, licensing, or monetization requirements. Distribution is personal, built from source or via Developer ID rather than the App Store, though the design stays App-Store-compatible where that is free.
 
 ## 6. Constraints & assumptions
 
 - macOS 14+ (Sonoma) or later; Apple Silicon and Intel.
 - Drives are already Ventoy-prepared (exFAT data partition); the app never partitions or formats.
 - Internet access required for version checks and downloads; the app must degrade gracefully offline.
-- ISO downloads are large (2–7 GB); downloads must be resumable and cached.
+- ISO downloads are large (2–7 GB), so downloads must be resumable and cached.
 
 ## 7. Risks
 
