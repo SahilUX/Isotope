@@ -8,6 +8,10 @@ Isotope tracks which operating systems live on which of your USB sticks, notices
 
 Requires macOS 14 or later. Universal binary (Apple Silicon + Intel). No third-party dependencies.
 
+![A registered Ventoy drive in Isotope, listing six assigned operating systems with their current and available versions](docs/screenshots/drive-ventoy.png)
+
+*A registered Ventoy drive. Each row shows what is on the stick, what is available, and how big it is.*
+
 ---
 
 ## What it tracks
@@ -30,6 +34,10 @@ An entry ships only when its version can be resolved from a stable machine-reada
 
 Anything not in the catalog can be added as a custom source. There are four detection mechanisms, each with a live "Test" button so you can see exactly what it parses before saving.
 
+![The Catalog view listing Ubuntu flavours, each with its LTS and Latest channel, resolved version, and source](docs/screenshots/catalog.png)
+
+*The catalog, grouped by organization. Every channel names the source it was resolved from and when it was last checked.*
+
 ## Keeping updates safe
 
 - Every ISO is SHA-256 verified against the publisher's checksum before it touches a drive. Sources without a published checksum are labelled unverified rather than silently trusted.
@@ -38,6 +46,10 @@ Anything not in the catalog can be added as a custom source. There are four dete
 - The free-space pre-flight counts the ISO being replaced, including one that shares the incoming file's name, and fails with the exact shortfall rather than running out mid-copy.
 - Updates always require explicit confirmation. Nothing is ever flashed or replaced automatically.
 - Downloaded ISOs are deleted as soon as they are on the drive (on by default). The cache is there to save a second download, not to keep a second copy of what you are already carrying on a stick. An image another queued drive still needs is kept until that drive has it too, and a failed copy keeps its download for the retry.
+
+![The Activity view showing download and copy history, including a failed copy and two out-of-space errors](docs/screenshots/activity.png)
+
+*Activity records every download, copy and flash. Failures stay in the history with the reason they failed.*
 
 ## The awkward cases
 
@@ -171,6 +183,10 @@ The catalog is data, not code. Distros change their URL layouts; when that happe
 All state is human-readable JSON.
 
 The cache does not accumulate. By default an ISO is deleted the moment it has been copied or flashed, so `~/Library/Caches/Isotope/` stays near empty between updates; what remains is interrupted downloads and anything still in use. Turn *Delete a downloaded ISO once it is on the drive* off in Settings and ISOs are kept instead, up to the cache limit (20 GB by default, LRU, clearable in Settings). That is worth it if the same image goes onto several drives on different days, since the second drive then needs no download.
+
+![Isotope's Settings window showing check interval, notification, download, cache and Windows options](docs/screenshots/settings.png)
+
+*Settings. Every option that changes what touches your disk explains itself in place.*
 
 No telemetry. The app talks only to the ISO sources in the catalog, their checksum files, and the GitHub API for entries that use it.
 
