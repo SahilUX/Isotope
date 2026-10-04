@@ -1,4 +1,5 @@
 import Foundation
+import IsotopeCore
 
 /// Streamed file copy with progress, cancellation and "the stick was pulled out"
 /// detection (PRD F25, DESIGN §6).
@@ -160,28 +161,34 @@ enum ChunkedCopy {
                 try? manager.removeItem(at: destination)
                 throw Failure.driveGone
             }
-            let chunk: Data
-            do {
-                chunk = try input.read(upToCount: chunkSize) ?? Data()
-            } catch {
-                try? manager.removeItem(at: destination)
-                throw Failure.io("The cached ISO could not be read: \(error.localizedDescription)")
+            // One pool per chunk, or every chunk read stays in RAM until the
+            // copy ends (see `withChunkScope`).
+            let count = try withChunkScope { () throws -> Int in
+                let chunk: Data
+                do {
+                    chunk = try input.read(upToCount: chunkSize) ?? Data()
+                } catch {
+                    try? manager.removeItem(at: destination)
+                    throw Failure.io("The cached ISO could not be read: \(error.localizedDescription)")
+                }
+                if chunk.isEmpty { return 0 }
+                do {
+                    try output.write(contentsOf: chunk)
+                } catch {
+                    let outOfSpace = Self.isOutOfSpace(error)
+                    try? manager.removeItem(at: destination)
+                    // A full or vanished volume both surface here, and they need
+                    // different words: one is "free some space", the other is
+                    // "plug it back in".
+                    if control() == .driveGone { throw Failure.driveGone }
+                    throw outOfSpace
+                        ? Failure.driveFull(bytesWritten: written)
+                        : Failure.io("Writing to the drive failed: \(error.localizedDescription)")
+                }
+                return chunk.count
             }
-            if chunk.isEmpty { break }
-            do {
-                try output.write(contentsOf: chunk)
-            } catch {
-                let outOfSpace = Self.isOutOfSpace(error)
-                try? manager.removeItem(at: destination)
-                // A full or vanished volume both surface here, and they need
-                // different words: one is "free some space", the other is
-                // "plug it back in".
-                if control() == .driveGone { throw Failure.driveGone }
-                throw outOfSpace
-                    ? Failure.driveFull(bytesWritten: written)
-                    : Failure.io("Writing to the drive failed: \(error.localizedDescription)")
-            }
-            written += Int64(chunk.count)
+            if count == 0 { break }
+            written += Int64(count)
             progress(written)
         }
         willSynchronize?()

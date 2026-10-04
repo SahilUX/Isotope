@@ -80,6 +80,32 @@ final class CopyHonestyTests: XCTestCase {
         XCTAssertEqual(TestFiles.size(destination), 128 * 1024)
     }
 
+    // MARK: - One chunk in memory, not the whole file
+
+    func testACopyHoldsOneChunkNotTheWholeFile() throws {
+        // Copying a 9 GB Windows ISO to Ventoy held every 4 MB chunk it had read
+        // — 8.3 GB of RAM at 8.67 GB in — because `FileHandle.read` returns
+        // autoreleased data and nothing drained the pool until the copy ended.
+        let size: UInt64 = 256 * 1024 * 1024
+        let source = root.appendingPathComponent("source.iso")
+        XCTAssertTrue(FileManager.default.createFile(atPath: source.path, contents: nil))
+        let handle = try FileHandle(forWritingTo: source)
+        try handle.truncate(atOffset: size) // sparse: no 256 MB buffer in the test itself
+        try handle.close()
+        let destination = root.appendingPathComponent("dest.iso")
+
+        let baseline = Footprint.current()
+        let peak = Recorder()
+        try ChunkedCopy.run(from: source, to: destination, chunkSize: 4 * 1024 * 1024,
+                            control: { .proceed },
+                            progress: { _ in peak.record(String(Footprint.current())) })
+
+        let growth = (peak.events.compactMap(UInt64.init).max() ?? 0) &- baseline
+        XCTAssertEqual(TestFiles.size(destination), Int64(size))
+        // Leaking, this is ~256 MB; draining per chunk, a handful of chunks.
+        XCTAssertLessThan(growth, 64 * 1024 * 1024, "grew \(growth / 1_048_576) MB")
+    }
+
     // MARK: - A full drive, named (PRD F68)
 
     func testAFullVolumeIsRecognisedHoweverItArrives() {
@@ -150,5 +176,19 @@ private final class Recorder: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return _events
+    }
+}
+
+/// The process's physical footprint, as Activity Monitor's Memory column shows it.
+private enum Footprint {
+    static func current() -> UInt64 {
+        var info = task_vm_info_data_t()
+        var count = mach_msg_type_number_t(MemoryLayout<task_vm_info_data_t>.size / MemoryLayout<natural_t>.size)
+        let result = withUnsafeMutablePointer(to: &info) {
+            $0.withMemoryRebound(to: integer_t.self, capacity: Int(count)) {
+                task_info(mach_task_self_, task_flavor_t(TASK_VM_INFO), $0, &count)
+            }
+        }
+        return result == KERN_SUCCESS ? info.phys_footprint : 0
     }
 }

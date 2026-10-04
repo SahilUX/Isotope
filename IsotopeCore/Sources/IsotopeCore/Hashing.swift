@@ -27,10 +27,13 @@ public extension Hashing {
         var read: Int64 = 0
         while true {
             guard shouldContinue() else { throw HashingError.cancelled }
-            let chunk = try handle.read(upToCount: chunkSize) ?? Data()
-            if chunk.isEmpty { break }
-            hasher.update(chunk)
-            read += Int64(chunk.count)
+            let count = try withChunkScope { () throws -> Int in
+                let chunk = try handle.read(upToCount: chunkSize) ?? Data()
+                hasher.update(chunk)
+                return chunk.count
+            }
+            if count == 0 { break }
+            read += Int64(count)
             progress(read)
         }
         return hasher.finalizeHex()

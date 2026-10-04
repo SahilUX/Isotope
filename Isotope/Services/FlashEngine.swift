@@ -323,11 +323,16 @@ actor FlashEngine {
                 var written: Int64 = 0
                 while true {
                     if flag.isSet { throw FlashError.cancelled }
-                    let chunk = try input.read(upToCount: chunkSize) ?? Data()
-                    if chunk.isEmpty { break }
-                    try handle.write(chunk)
-                    hasher.update(chunk)
-                    written += Int64(chunk.count)
+                    // Per-chunk pool: see `withChunkScope`.
+                    let count = try withChunkScope { () throws -> Int in
+                        let chunk = try input.read(upToCount: chunkSize) ?? Data()
+                        if chunk.isEmpty { return 0 }
+                        try handle.write(chunk)
+                        hasher.update(chunk)
+                        return chunk.count
+                    }
+                    if count == 0 { break }
+                    written += Int64(count)
                     let progress = rate.record(written: written, total: total)
                     guard throttle.shouldEmit(force: written >= total) else { continue }
                     Task { @MainActor in
@@ -384,10 +389,13 @@ actor FlashEngine {
                 while read < byteCount {
                     if flag.isSet { throw FlashError.cancelled }
                     let want = Int(min(Int64(chunkSize), byteCount - read))
-                    let chunk = try reader.read(upTo: want)
-                    if chunk.isEmpty { throw FlashIOError.deviceVanished }
-                    hasher.update(chunk)
-                    read += Int64(chunk.count)
+                    let count = try withChunkScope { () throws -> Int in
+                        let chunk = try reader.read(upTo: want)
+                        if chunk.isEmpty { throw FlashIOError.deviceVanished }
+                        hasher.update(chunk)
+                        return chunk.count
+                    }
+                    read += Int64(count)
                     let progress = rate.record(written: read, total: byteCount)
                     Task { @MainActor in
                         store.updateOperationProgress(id: operationID, stage: nil, progress: progress)
