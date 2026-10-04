@@ -43,8 +43,9 @@ final class DownloadsWatcher {
     /// Regex matched against the filename; the catalog's own recognition
     /// pattern for the entry, when it has one.
     var pattern: String = #"(?i)^win.*\.iso$"#
-    /// The other catalog entries' recognition patterns. A file one of them
-    /// claims is that entry's media, so it is not offered here as a fallback.
+    /// What identifies the other catalog entries' media: their recognition
+    /// patterns and names. A file one of them claims is that entry's media, so
+    /// it is not offered here as a fallback.
     var excludedPatterns: [String] = []
     var interval: TimeInterval = 5
     var folder: URL = FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask).first
@@ -106,6 +107,20 @@ final class DownloadsWatcher {
             excluders.contains { $0.matchesAnywhere(iso.fileName) }
         }
         return (isos.filter(matches), isos.filter { !matches($0) && !belongsElsewhere($0) }, true)
+    }
+
+    /// A pattern finding an entry's name in a filename regardless of the
+    /// separators between its words: "Windows 11" matches `Windows11_Client`,
+    /// `windows-11` and `Windows 11`, but not `Windows 10` or `Windows 110`.
+    /// Nil for a name with nothing alphanumeric in it.
+    static func namePattern(for name: String) -> String? {
+        let words = name.lowercased()
+            .components(separatedBy: CharacterSet.alphanumerics.inverted)
+            .filter { !$0.isEmpty }
+        guard let last = words.last?.last else { return nil }
+        let body = words.map(NSRegularExpression.escapedPattern(for:)).joined(separator: "[^a-z0-9]*")
+        let end = last.isNumber ? "(?![0-9])" : "(?![a-z])"
+        return "(?i)(?<![a-z0-9])" + body + end
     }
 
     static func matches(in folder: URL, pattern: String) -> [FoundISO] {

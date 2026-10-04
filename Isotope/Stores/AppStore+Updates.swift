@@ -256,13 +256,17 @@ extension AppStore {
         return pattern
     }
 
-    /// Every other entry's media pattern, so the Downloads watch does not offer
-    /// `Win10_22H2_English_x64.iso` as a fallback for Windows 11.
+    /// What identifies every *other* entry's media, so the Downloads watch does
+    /// not offer one image's ISO as a fallback for another: each channel's
+    /// recognition pattern (`Win10_22H2_English_x64.iso`) and each entry's name
+    /// (`Windows11_Client_x64_en-us_26300_9457.iso`, which no pattern claims
+    /// because Microsoft does not name its media that way).
     func otherMediaFileNamePatterns(excludingEntryID entryID: String) -> [String] {
-        allEntries.filter { $0.id != entryID }
-            .flatMap(\.channels)
+        let others = allEntries.filter { $0.id != entryID }
+        let recognition = others.flatMap(\.channels)
             .compactMap { $0.provider.fileNamePattern }
             .filter { !$0.isEmpty }
+        return recognition + others.compactMap { DownloadsWatcher.namePattern(for: $0.name) }
     }
 
     /// PRD F48/F49: the download-connector configuration for a Windows channel.

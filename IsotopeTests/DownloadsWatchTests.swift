@@ -114,6 +114,30 @@ final class DownloadsWatchTests: XCTestCase {
         let found = DownloadsWatcher.scan(folder: folder, pattern: catalogPattern, excluding: excluded)
         XCTAssertEqual(Set(found.other.map(\.fileName)),
                        ["Windows11_Client_x64_en-us_26300_9457.iso", "my-windows-11.iso"])
+
+        // And the other way round: the Windows 10 sheet offers neither the
+        // official Windows 11 media nor one named after Windows 11 by hand.
+        try write("Win11_25H2_English_x64.iso")
+        let win10 = DownloadsWatcher.scan(
+            folder: folder,
+            pattern: store.mediaFileNamePattern(entryID: "windows-10", channelID: "default")!,
+            excluding: store.otherMediaFileNamePatterns(excludingEntryID: "windows-10"))
+        XCTAssertEqual(win10.matching.map(\.fileName), ["Win10_22H2_English_x64v1.iso"])
+        XCTAssertTrue(win10.other.isEmpty, "\(win10.other.map(\.fileName))")
+    }
+
+    func testANameMatchesWhateverSeparatesItsWords() throws {
+        let pattern = try PatternMatcher(DownloadsWatcher.namePattern(for: "Windows 11")!)
+        for name in ["Windows11_Client_x64.iso", "windows-11.iso", "My Windows 11.iso"] {
+            XCTAssertTrue(pattern.matchesAnywhere(name), name)
+        }
+        for name in ["Windows10_Client.iso", "Windows110.iso", "notwindows11.iso"] {
+            XCTAssertFalse(pattern.matchesAnywhere(name), name)
+        }
+        let pop = try PatternMatcher(DownloadsWatcher.namePattern(for: "Pop!_OS")!)
+        XCTAssertTrue(pop.matchesAnywhere("pop-os_24.04_amd64_intel_23.iso"))
+        XCTAssertFalse(try PatternMatcher(DownloadsWatcher.namePattern(for: "Ubuntu Desktop")!)
+            .matchesAnywhere("kubuntu-24.04-desktop-amd64.iso"))
     }
 
     func testNewestFirst() throws {
