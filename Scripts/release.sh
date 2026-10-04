@@ -26,6 +26,9 @@ SIGNING=(
   CODE_SIGN_IDENTITY="$IDENTITY"
   DEVELOPMENT_TEAM="$TEAM_ID"
   OTHER_CODE_SIGN_FLAGS=--timestamp
+  # Xcode adds get-task-allow (debugger attach) unless told not to, and the
+  # notary service rejects any executable that carries it.
+  CODE_SIGN_INJECT_BASE_ENTITLEMENTS=NO
 )
 
 xcodebuild -project Isotope.xcodeproj -scheme Isotope -configuration Release \
@@ -41,7 +44,14 @@ codesign -dvv "$APP" 2>&1 | grep -E "^(Authority=Developer ID Application|TeamId
 if xcrun notarytool history --keychain-profile "$PROFILE" >/dev/null 2>&1; then
   ZIP=$(mktemp -d)/Isotope.zip
   ditto -c -k --keepParent "$APP" "$ZIP"
-  xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait
+  OUT=$(xcrun notarytool submit "$ZIP" --keychain-profile "$PROFILE" --wait --output-format json)
+  ID=$(echo "$OUT" | plutil -extract id raw -)
+  STATUS=$(echo "$OUT" | plutil -extract status raw -)
+  if [ "$STATUS" != "Accepted" ]; then
+    echo "error: notarization $STATUS ($ID)" >&2
+    xcrun notarytool log "$ID" --keychain-profile "$PROFILE" >&2
+    exit 1
+  fi
   xcrun stapler staple "$APP"
   spctl --assess --type execute --verbose "$APP"
   rm -f "$ZIP"

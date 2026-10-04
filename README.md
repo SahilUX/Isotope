@@ -202,7 +202,7 @@ What that means in practice:
 
 - **Flashing erases a whole device.** The safety gates and the naming confirmation are real and tested, but the consequence of a bug here is somebody's disk. Read the device name in the confirmation dialog every time.
 - **The catalog is only as fresh as the last verification run.** Distributions move their URLs without warning. Every entry was live-verified on 2026-08-20; if a source drifts, checks report a failure for that channel rather than a wrong version, and the fix is a `catalog.json` edit plus `Scripts/verify-catalog.sh`.
-- **There is no notarised build.** Build from source; the app is signed ad-hoc.
+- **There is no published notarised build yet.** Build from source; source builds are signed ad-hoc.
 - **No migration promises yet.** State is human-readable JSON under `~/Library/Application Support/Isotope/`, and unknown fields are tolerated, but nothing here is a stability guarantee.
 - **Windows build detection has been exercised against synthetic images and real media on one machine.** Unusual media, custom or repacked ISOs, may simply report no build.
 
