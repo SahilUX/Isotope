@@ -108,7 +108,10 @@ actor DownloadManager: ISOProviding {
     /// PRD F19: max 2 concurrent downloads, configurable.
     private var maxConcurrent: Int
     private var runningCount = 0
-    private var slotWaiters: [CheckedContinuation<Void, Never>] = []
+    /// Resumed with `true` when handed a slot, `false` when cancelled first.
+    private var slotWaiters: [(key: String, continuation: CheckedContinuation<Bool, Never>)] = []
+    /// Set while a download's checksum is being computed, so cancel can stop it.
+    private var verifyFlags: [String: CancellationFlag] = [:]
 
     private var inFlight: [String: Task<LocalISO, Error>] = [:]
     private var observers: [String: [UUID: @Sendable (DownloadStage, TransferProgress) -> Void]] = [:]
@@ -153,7 +156,7 @@ actor DownloadManager: ISOProviding {
         maxConcurrent = max(1, value)
         // A raised limit should let queued work start immediately.
         while runningCount < maxConcurrent, !slotWaiters.isEmpty {
-            slotWaiters.removeFirst().resume()
+            slotWaiters.removeFirst().continuation.resume(returning: true)
             runningCount += 1
         }
     }
@@ -280,7 +283,12 @@ actor DownloadManager: ISOProviding {
         pausedKeys.remove(cacheKey)
         pauseRequested.remove(cacheKey)
         activeTasks[cacheKey]?.cancel()
+        verifyFlags[cacheKey]?.set()
         for waiter in pauseWaiters.removeValue(forKey: cacheKey) ?? [] { waiter.resume() }
+        // Still queued for a download slot: leave the queue without taking one.
+        let queued = slotWaiters.filter { $0.key == cacheKey }
+        slotWaiters.removeAll { $0.key == cacheKey }
+        for waiter in queued { waiter.continuation.resume(returning: false) }
         inFlight[cacheKey]?.cancel()
     }
 
@@ -359,7 +367,12 @@ actor DownloadManager: ISOProviding {
         var resumeData = loadResumeData(key: key)
         while true {
             if cancelledKeys.contains(key) { throw DownloadError.cancelled }
-            try await acquireSlot()
+            try await acquireSlot(key: key)
+            // Cancelled while it waited for the slot it has just been given.
+            if cancelledKeys.contains(key) {
+                releaseSlot()
+                throw DownloadError.cancelled
+            }
             do {
                 let file = try await transfer(request, resumeData: resumeData)
                 releaseSlot()
@@ -380,6 +393,7 @@ actor DownloadManager: ISOProviding {
         let key = request.cacheKey
         let expected = request.expectedSizeBytes
         let progressBox = ProgressBox()
+        let throttle = ProgressThrottle()
 
         return try await withCheckedThrowingContinuation { continuation in
             let task: URLSessionDownloadTask = resumeData.map { session.downloadTask(withResumeData: $0) }
@@ -387,6 +401,13 @@ actor DownloadManager: ISOProviding {
             sessionDelegate.register(task, handlers: DownloadSessionDelegate.Handlers(
                 progress: { [weak self] written, total in
                     let snapshot = progressBox.record(written: written, total: total > 0 ? total : expected)
+                    // URLSession reports every few kilobytes — hundreds of times
+                    // a second on a fast line. Forwarding each one queued work on
+                    // this actor ahead of Cancel and Pause, and rebuilt the
+                    // Activity row so often its buttons dropped clicks (PRD F62
+                    // already throttles the copy for the same reason).
+                    guard throttle.shouldEmit(force: snapshot.total.map { written >= $0 } ?? false)
+                    else { return }
                     Task { await self?.reportProgress(key: key, snapshot: snapshot) }
                 },
                 finish: { [weak self] result in
@@ -465,17 +486,27 @@ actor DownloadManager: ISOProviding {
         emit(request.cacheKey, .verifying, TransferProgress(completedBytes: 0, totalBytes: size))
         let hashing = self.hashing
         let key = request.cacheKey
+        let flag = CancellationFlag()
+        if cancelledKeys.contains(key) { flag.set() }
+        verifyFlags[key] = flag
+        defer { verifyFlags[key] = nil }
         // Hashing knows the file size up front, so verification reports real
         // progress (DESIGN §5). Reported every 16 MB — often enough to move a
         // bar, rare enough not to flood the actor.
-        let digest = try await Task.detached(priority: .userInitiated) { [weak self] in
-            var nextReport: Int64 = 16 << 20
-            return try hashing.sha256Hex(ofFileAt: file, progress: { read in
-                guard read >= nextReport else { return }
-                nextReport = read + (16 << 20)
-                Task { await self?.emitVerifyProgress(key: key, read: read, total: size) }
-            })
-        }.value
+        let digest: String
+        do {
+            digest = try await Task.detached(priority: .userInitiated) { [weak self] in
+                var nextReport: Int64 = 16 << 20
+                return try hashing.sha256Hex(ofFileAt: file, shouldContinue: { !flag.isSet },
+                                             progress: { read in
+                    guard read >= nextReport else { return }
+                    nextReport = read + (16 << 20)
+                    Task { await self?.emitVerifyProgress(key: key, read: read, total: size) }
+                })
+            }.value
+        } catch HashingError.cancelled {
+            throw DownloadError.cancelled
+        }
         guard checksumsMatch(digest, expectedHash) else {
             throw DownloadError.checksumMismatch(fileName: request.fileName)
         }
@@ -488,14 +519,15 @@ actor DownloadManager: ISOProviding {
 
     // MARK: - Slots
 
-    private func acquireSlot() async throws {
+    private func acquireSlot(key: String) async throws {
         if runningCount < maxConcurrent {
             runningCount += 1
             return
         }
-        await withCheckedContinuation { continuation in
-            slotWaiters.append(continuation)
+        let granted = await withCheckedContinuation { continuation in
+            slotWaiters.append((key, continuation))
         }
+        guard granted else { throw DownloadError.cancelled }
     }
 
     private func releaseSlot() {
@@ -503,7 +535,7 @@ actor DownloadManager: ISOProviding {
             runningCount = max(0, runningCount - 1)
         } else {
             // Hand the slot straight over rather than decrementing and racing.
-            slotWaiters.removeFirst().resume()
+            slotWaiters.removeFirst().continuation.resume(returning: true)
         }
     }
 

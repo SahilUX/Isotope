@@ -109,6 +109,10 @@ actor UpdateEngine {
     private var chains: [UUID: Task<Void, Never>] = [:]
     private var cancellations: [UUID: CancellationFlag] = [:]
     private var cacheKeys: [UUID: String] = [:]
+    /// Queued behind another operation on the same drive and not started yet.
+    /// Cancelling one of these ends it on the spot instead of when its turn
+    /// would have come.
+    private var waiting: [UUID: UpdateRequest] = [:]
     /// PRD F47: cache keys the queue still has work for, counted. A placed ISO
     /// is deleted straight away — but not while a *later* item in the same
     /// batch is going to want the identical file, which is exactly what
@@ -143,6 +147,7 @@ actor UpdateEngine {
         }
         for request in requests {
             cancellations[request.id] = CancellationFlag()
+            waiting[request.id] = request
             await store.beginOperation(for: request)
             let previous = chains[request.driveID]
             chains[request.driveID] = Task { [weak self] in
@@ -155,6 +160,7 @@ actor UpdateEngine {
     /// PRD §5.4 Windows flow: place a file the user downloaded themselves.
     func enqueueManual(_ request: UpdateRequest, sourceFile: URL, fileName: String) async {
         cancellations[request.id] = CancellationFlag()
+        waiting[request.id] = request
         await store.beginOperation(for: request)
         let previous = chains[request.driveID]
         chains[request.driveID] = Task { [weak self] in
@@ -166,6 +172,8 @@ actor UpdateEngine {
 
     private func performManual(_ request: UpdateRequest, sourceFile: URL, fileName: String) async {
         defer { cancellations[request.id] = nil }
+        // Already finished by `cancel` while it was queued.
+        guard waiting.removeValue(forKey: request.id) != nil else { return }
         do {
             let placed = try await executeManual(request, sourceFile: sourceFile, fileName: fileName)
             await store.finishOperation(request: request, result: .success(placed))
@@ -185,7 +193,14 @@ actor UpdateEngine {
     }
 
     func cancel(operationID: UUID) async {
-        cancellations[operationID]?.set()
+        guard let flag = cancellations[operationID] else { return }
+        flag.set()
+        if let request = waiting.removeValue(forKey: operationID) {
+            // Nothing has started, so there is nothing to wind down. Its chain
+            // task still runs when its turn comes, finds it gone and returns.
+            await store.finishOperation(request: request, result: .failure(.cancelled))
+            return
+        }
         if let key = cacheKeys[operationID] { await downloads.cancel(cacheKey: key) }
     }
 
@@ -212,6 +227,8 @@ actor UpdateEngine {
             releaseClaim(of: request)
             releasedRequests.remove(request.id)
         }
+        // Already finished by `cancel` while it was queued.
+        guard waiting.removeValue(forKey: request.id) != nil else { return }
         if cancellations[request.id]?.isSet == true {
             await store.finishOperation(request: request, result: .failure(.cancelled))
             return
@@ -287,6 +304,9 @@ actor UpdateEngine {
                                      assignmentID: request.assignmentID))
         cacheKeys[request.id] = isoRequest.cacheKey
         await store.setOperationCacheKey(id: request.id, key: isoRequest.cacheKey)
+        // A cancel that landed before the cache key was known had no download
+        // to stop, so it is honoured here rather than after the download.
+        if cancellations[request.id]?.isSet == true { throw UpdateError.cancelled }
 
         let operationID = request.id
         let store = self.store

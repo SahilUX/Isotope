@@ -460,6 +460,82 @@ final class UpdateEngineTests: XCTestCase {
         XCTAssertFalse(listing.contains { DownloadArtifact.isPartFileName($0) })
     }
 
+    // MARK: - Cancel from the Activity view
+
+    /// A second assignment on the fixture's drive, so two operations queue on it.
+    private func addDebian(to fixture: Fixture) -> UpdateRequest {
+        fixture.store.addCustomEntry(CatalogEntry(
+            id: "debian", name: "Debian", kind: .linux, channels: [
+                Channel(id: "netinst", name: "netinst",
+                        provider: .checksumFile(url: URL(string: "https://example.test/SHA256SUMS")!,
+                                                filePattern: #"debian-(\d+\.\d+\.\d+)-amd64-netinst\.iso"#))
+            ], isBuiltIn: false))
+        let assignment = fixture.store.addAssignment(entryID: "debian", channelID: "netinst",
+                                                      to: fixture.driveID)!
+        let release = Release(version: .parse("12.7.0")!,
+                              isoURL: URL(string: "https://example.test/debian-12.7.0-amd64-netinst.iso"),
+                              fileName: "debian-12.7.0-amd64-netinst.iso",
+                              sha256: "def456", sizeBytes: 256 * 1024)
+        return UpdateRequest(driveID: fixture.driveID, driveName: "VENTOY",
+                             assignmentID: assignment.id, entryID: "debian", channelID: "netinst",
+                             title: "Debian — netinst", release: release)
+    }
+
+    private func ubuntuRequest(_ fixture: Fixture) -> UpdateRequest {
+        UpdateRequest(driveID: fixture.driveID, driveName: "VENTOY",
+                      assignmentID: fixture.assignmentID, entryID: "ubuntu", channelID: "lts",
+                      title: "Ubuntu Desktop — LTS", release: fixture.release)
+    }
+
+    private func gate(_ fixture: Fixture) throws -> (UpdateEngine, GatedISOProvider) {
+        let file = try TestFiles.write(cacheDir.appendingPathComponent("gated.iso"), size: 256 * 1024)
+        let gated = GatedISOProvider(file: file)
+        let engine = UpdateEngine(store: fixture.store, downloads: gated, drives: fixture.writer)
+        fixture.store.updateEngine = engine
+        return (engine, gated)
+    }
+
+    func testCancellingADownloadStopsItAndSaysSoAtOnce() async throws {
+        let fixture = try await makeFixture()
+        let (engine, gated) = try gate(fixture)
+        let request = ubuntuRequest(fixture)
+        await engine.enqueue([request])
+        await waitUntil { gated.started.count == 1 }
+
+        fixture.store.cancelOperation(id: request.id)
+        // The row changes before the engine has done anything.
+        XCTAssertEqual(fixture.store.operations.first?.isCancelling, true)
+
+        await engine.drain()
+        XCTAssertEqual(fixture.store.operations.first?.phase, .cancelled)
+        XCTAssertEqual(gated.cancelledKeys, [gated.started[0]])
+        XCTAssertNil(fixture.store.drive(id: fixture.driveID)!.assignments[0].installed)
+    }
+
+    /// The reported bug's other half: an update waiting behind another one on
+    /// the same drive ignored Cancel until its turn came.
+    func testCancellingAQueuedUpdateEndsItWithoutWaitingForItsTurn() async throws {
+        let fixture = try await makeFixture()
+        let (engine, gated) = try gate(fixture)
+        let first = ubuntuRequest(fixture)
+        let second = addDebian(to: fixture)
+        await engine.enqueue([first, second])
+        await waitUntil { gated.started.count == 1 }
+
+        fixture.store.cancelOperation(id: second.id)
+        await waitUntil { fixture.store.operations.first { $0.id == second.id }?.phase == .cancelled }
+        // The first is still downloading, untouched.
+        XCTAssertEqual(fixture.store.operations.first { $0.id == first.id }?.isActive, true)
+
+        gated.release()
+        await engine.drain()
+        XCTAssertEqual(fixture.store.operations.first { $0.id == first.id }?.phase, .completed)
+        XCTAssertEqual(fixture.store.operations.first { $0.id == second.id }?.phase, .cancelled)
+        // The cancelled one never started a download.
+        XCTAssertEqual(gated.started.count, 1)
+        XCTAssertEqual(fixture.store.history.filter { $0.outcome == .cancelled }.count, 1)
+    }
+
     // MARK: - Plans (PRD F17/F21)
 
     func testPlanLabelsUnverifiedSourcesAndSkipsManualOnes() async throws {

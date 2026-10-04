@@ -127,6 +127,28 @@ final class FlashEngineTests: XCTestCase {
         XCTAssertFalse(store.history.first?.message?.contains("verified") == true)
     }
 
+    // MARK: - Cancel from the Activity view
+
+    /// The Activity row's Cancel used to reach only the update engine, so a
+    /// flash could not be stopped from there at all.
+    func testCancelInActivityReachesAFlash() async throws {
+        let (store, drive) = await makeStore()
+        let io = FakeFlashDeviceIO(description: device())
+        let gated = GatedISOProvider(file: isoURL)
+        let engine = FlashEngine(store: store, downloads: gated, io: io, hashing: store.hashing)
+        store.flashEngine = engine
+        let flash = request(drive: drive)
+        await engine.enqueue(flash)
+        await waitUntil { gated.started.count == 1 }
+
+        store.cancelOperation(id: flash.id)
+        await engine.drain()
+
+        XCTAssertEqual(store.operations.first?.phase, .cancelled)
+        XCTAssertTrue(io.written.isEmpty)
+        XCTAssertEqual(io.unmountCount, 0)
+    }
+
     // MARK: - Gates (PRD F29/F31)
 
     func testBootDiskIsRefusedBeforeAnythingIsWritten() async throws {

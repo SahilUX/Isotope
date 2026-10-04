@@ -1,4 +1,5 @@
 import Foundation
+import XCTest
 import IsotopeCore
 @testable import Isotope
 
@@ -125,6 +126,76 @@ final class FakeISOProvider: ISOProviding, @unchecked Sendable {
     func pause(cacheKey: String) async { lock.withLock { _pausedKeys.append(cacheKey) } }
     func resume(cacheKey: String) async {}
     func cancel(cacheKey: String) async { lock.withLock { _cancelledKeys.append(cacheKey) } }
+}
+
+/// Holds every download open until the test releases it or it is cancelled:
+/// the state the Activity view's Cancel button is pressed in.
+final class GatedISOProvider: ISOProviding, @unchecked Sendable {
+    private let lock = NSLock()
+    private let file: URL
+    private var waiters: [String: CheckedContinuation<Void, Error>] = [:]
+    private var released = false
+    private var _started: [String] = []
+    private var _cancelledKeys: [String] = []
+
+    init(file: URL) { self.file = file }
+
+    /// Cache keys whose download has begun, in order.
+    var started: [String] { lock.withLock { _started } }
+    var cancelledKeys: [String] { lock.withLock { _cancelledKeys } }
+
+    func ensureLocalISO(_ request: ISORequest,
+                        progress: @escaping @Sendable (DownloadStage, TransferProgress) -> Void)
+        async throws -> LocalISO {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
+            let proceed = lock.withLock {
+                _started.append(request.cacheKey)
+                if released { return true }
+                waiters[request.cacheKey] = continuation
+                return false
+            }
+            if proceed { continuation.resume() }
+        }
+        let size = (try? file.resourceValues(forKeys: [.fileSizeKey]).fileSize).map(Int64.init) ?? 0
+        return LocalISO(url: file, fileName: request.isoFileName, sizeBytes: size,
+                        cacheKey: request.cacheKey)
+    }
+
+    /// Lets every held download, and every later one, finish.
+    func release() {
+        let held: [CheckedContinuation<Void, Error>] = lock.withLock {
+            released = true
+            defer { waiters = [:] }
+            return Array(waiters.values)
+        }
+        for waiter in held { waiter.resume() }
+    }
+
+    @discardableResult
+    func endUse(cacheKey: String, discard: Bool) async -> Int64 { 0 }
+    func pause(cacheKey: String) async {}
+    func resume(cacheKey: String) async {}
+    func cancel(cacheKey: String) async {
+        let waiter = lock.withLock {
+            _cancelledKeys.append(cacheKey)
+            return waiters.removeValue(forKey: cacheKey)
+        }
+        waiter?.resume(throwing: DownloadError.cancelled)
+    }
+}
+
+/// Polls the main actor until `condition` holds, failing after `timeout`.
+@MainActor
+func waitUntil(timeout: TimeInterval = 5, file: StaticString = #filePath, line: UInt = #line,
+               _ condition: () -> Bool) async {
+    let deadline = Date().addingTimeInterval(timeout)
+    while !condition() {
+        guard Date() < deadline else {
+            XCTFail("condition not met within \(timeout)s", file: file, line: line)
+            return
+        }
+        try? await Task.sleep(nanoseconds: 10_000_000)
+    }
 }
 
 // MARK: - Helpers

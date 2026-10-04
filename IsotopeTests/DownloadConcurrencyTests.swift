@@ -69,6 +69,43 @@ final class DownloadConcurrencyTests: XCTestCase {
         _ = await firstRun.result
     }
 
+    /// A download queued for a slot leaves the queue when cancelled, rather than
+    /// waiting for the slot and then downloading anyway.
+    func testCancellingADownloadWaitingForASlotEndsItThere() async throws {
+        let manager = makeManager(maxConcurrent: 1)
+        let first = request("holding.iso")
+        let started = expectation(description: "first download holds the only slot")
+        let firstProgressed = OneShot(started)
+        let firstRun = Task {
+            _ = try? await manager.ensureLocalISO(first) { _, progress in
+                if progress.completedBytes > 0 { firstProgressed.fire() }
+            }
+        }
+        await fulfillment(of: [started], timeout: 5)
+
+        let second = request("queued.iso")
+        let secondRun = Task { try await manager.ensureLocalISO(second) { _, _ in } }
+        try await Task.sleep(nanoseconds: 50_000_000)
+        await manager.cancel(cacheKey: second.cacheKey)
+
+        let outcome = try await withThrowingTaskGroup(of: Error?.self) { group -> Error? in
+            group.addTask {
+                do { _ = try await secondRun.value; return nil } catch { return error }
+            }
+            group.addTask {
+                try await Task.sleep(nanoseconds: 5 * NSEC_PER_SEC)
+                throw StuckQueue()
+            }
+            let result = try await group.next()!
+            group.cancelAll()
+            return result
+        }
+        XCTAssertEqual(outcome as? DownloadError, .cancelled)
+
+        await manager.cancel(cacheKey: first.cacheKey)
+        _ = await firstRun.result
+    }
+
     /// Resuming a parked download takes a slot again, and it runs to completion.
     func testAResumedDownloadReacquiresASlotAndFinishes() async throws {
         let manager = makeManager(maxConcurrent: 1)

@@ -111,7 +111,7 @@ private struct OperationRow: View {
     @ViewBuilder
     private var controls: some View {
         HStack(spacing: 8) {
-            if operation.canPause {
+            if operation.canPause, !operation.isCancelling {
                 Button(operation.isPaused ? "Resume" : "Pause") {
                     if operation.isPaused {
                         store.resumeOperation(id: operation.id)
@@ -123,11 +123,13 @@ private struct OperationRow: View {
             }
             Button("Cancel") { store.cancelOperation(id: operation.id) }
                 .buttonStyle(.link)
+                .disabled(operation.isCancelling)
         }
         .font(.caption)
     }
 
     private var statusLine: String {
+        if operation.isCancelling { return "Cancelling…" }
         if operation.isPaused { return "Paused · \(byteSummary)" }
         var parts = [operation.phase.label]
         if !byteSummary.isEmpty { parts.append(byteSummary) }

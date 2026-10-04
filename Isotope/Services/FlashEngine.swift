@@ -124,6 +124,9 @@ actor FlashEngine {
     private var chains: [UUID: Task<Void, Never>] = [:]
     private var cancellations: [UUID: CancellationFlag] = [:]
     private var cacheKeys: [UUID: String] = [:]
+    /// Queued behind another flash of the same drive and not started yet, so a
+    /// cancel can end it on the spot.
+    private var waiting: [UUID: FlashRequest] = [:]
 
     /// 4 MiB, as DESIGN §9 step 5 specifies; overridable so tests can force many
     /// iterations over a small image.
@@ -142,6 +145,7 @@ actor FlashEngine {
 
     func enqueue(_ request: FlashRequest) async {
         cancellations[request.id] = CancellationFlag()
+        waiting[request.id] = request
         await store.beginFlashOperation(for: request)
         let previous = chains[request.driveID]
         chains[request.driveID] = Task { [weak self] in
@@ -155,7 +159,12 @@ actor FlashEngine {
     }
 
     func cancel(operationID: UUID) async {
-        cancellations[operationID]?.set()
+        guard let flag = cancellations[operationID] else { return }
+        flag.set()
+        if let request = waiting.removeValue(forKey: operationID) {
+            await store.finishFlashOperation(request: request, result: .failure(.cancelled))
+            return
+        }
         if let key = cacheKeys[operationID] { await downloads.cancel(cacheKey: key) }
     }
 
@@ -166,6 +175,8 @@ actor FlashEngine {
             cancellations[request.id] = nil
             cacheKeys[request.id] = nil
         }
+        // Already finished by `cancel` while it was queued.
+        guard waiting.removeValue(forKey: request.id) != nil else { return }
         do {
             let flashed = try await execute(request)
             await store.finishFlashOperation(request: request, result: .success(flashed))
@@ -216,6 +227,7 @@ actor FlashEngine {
                                      assignmentID: request.assignmentID))
         cacheKeys[request.id] = isoRequest.cacheKey
         await store.setOperationCacheKey(id: request.id, key: isoRequest.cacheKey)
+        if flag.isSet { throw FlashError.cancelled }
 
         let operationID = request.id
         let store = self.store

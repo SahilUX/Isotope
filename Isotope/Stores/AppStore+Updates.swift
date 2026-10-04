@@ -58,6 +58,10 @@ struct UpdateOperationState: Identifiable, Hashable, Sendable {
     var version: String
     var phase: Phase = .queued
     var isPaused = false
+    /// The user pressed Cancel and the engine has not wound down yet. Shown
+    /// straight away, so the button visibly did something even when the step
+    /// in progress takes a moment to notice.
+    var isCancelling = false
     var completedBytes: Int64 = 0
     var totalBytes: Int64?
     var bytesPerSecond: Double?
@@ -308,9 +312,18 @@ extension AppStore {
         Task { await engine.enqueue([request]) }
     }
 
+    /// The Activity row does not know which engine owns an operation, and a
+    /// flash appears there exactly like an update — so both are told. Each
+    /// ignores an id it does not own.
     func cancelOperation(id: UUID) {
-        guard let engine = updateEngine else { return }
-        Task { await engine.cancel(operationID: id) }
+        guard operations.first(where: { $0.id == id })?.isActive == true else { return }
+        mutateOperation(id: id) { $0.isCancelling = true }
+        let updates = updateEngine
+        let flashes = flashEngine
+        Task {
+            await updates?.cancel(operationID: id)
+            await flashes?.cancel(operationID: id)
+        }
     }
 
     func pauseOperation(id: UUID) {
