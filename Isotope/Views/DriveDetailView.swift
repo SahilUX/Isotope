@@ -16,6 +16,8 @@ struct DriveDetailView: View {
     @State private var pendingPlan: UpdatePlan?
     /// PRD §5.4: the Windows hand-off sheet.
     @State private var manualItem: UpdatePlanItem?
+    /// PRD F71: an untracked file waiting on "Delete from Drive" confirmation.
+    @State private var pendingDeletion: String?
 
     var body: some View {
         Group {
@@ -37,6 +39,15 @@ struct DriveDetailView: View {
             Button("OK", role: .cancel) { actionError = nil }
         } message: {
             Text(actionError ?? "")
+        }
+        .confirmationDialog("Delete “\(pendingDeletion ?? "")” from the drive?",
+                            isPresented: showingDeletion, titleVisibility: .visible) {
+            Button("Delete", role: .destructive) {
+                if let name = pendingDeletion { delete(fileName: name) }
+            }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(deletionMessage)
         }
         .sheet(item: $pendingPlan) { plan in
             UpdateConfirmationSheet(plan: plan) { confirmed in
@@ -68,6 +79,24 @@ struct DriveDetailView: View {
         let plan = store.updatePlanForAllStale(driveID: driveID)
         guard !plan.isEmpty else { return }
         pendingPlan = plan
+    }
+
+    private var showingDeletion: Binding<Bool> {
+        Binding(get: { pendingDeletion != nil }, set: { if !$0 { pendingDeletion = nil } })
+    }
+
+    private var deletionMessage: String {
+        let size = isoSizeText(store.isoSize(fileName: pendingDeletion, on: driveID))
+        let freed = size.isEmpty ? "" : " This frees\(size.dropFirst(2)) on the drive."
+        return "The file is deleted permanently, not moved to the Trash.\(freed)"
+    }
+
+    private func delete(fileName: String) {
+        do {
+            try store.deleteISO(fileName: fileName, on: driveID)
+        } catch {
+            actionError = error.localizedDescription
+        }
     }
 
     private var showingError: Binding<Bool> {
@@ -118,7 +147,8 @@ struct DriveDetailView: View {
             } else {
                 ForEach(drive.assignments) { assignment in
                     AssignmentRow(assignment: assignment, driveID: drive.id,
-                                  onUpdate: { requestUpdate(assignmentID: assignment.id) })
+                                  onUpdate: { requestUpdate(assignmentID: assignment.id) },
+                                  onError: { actionError = $0 })
                 }
             }
         } header: {
@@ -144,11 +174,12 @@ struct DriveDetailView: View {
             Section {
                 ForEach(detected) { item in
                     DetectedISORow(detected: item, driveID: drive.id)
+                        .contextMenu { deleteFileButton(item.fileName, on: drive) }
                 }
             } header: {
                 Text("Found on this drive")
             } footer: {
-                Text("Isotope recognised these ISOs but does not track them yet. Track the latest release, or keep the file exactly as it is — either way nothing on the drive is changed.")
+                Text("Isotope recognised these ISOs but does not track them yet. Track the latest release, or keep the file exactly as it is — either way nothing on the drive is changed. Right-click a file to delete it.")
                     .font(.caption)
             }
         }
@@ -164,14 +195,25 @@ struct DriveDetailView: View {
                           systemImage: "doc.questionmark")
                         .font(.callout)
                         .foregroundStyle(.secondary)
+                        .contextMenu { deleteFileButton(name, on: drive) }
                 }
             } header: {
                 Text("Unrecognised files")
             } footer: {
-                Text("Isotope found these files but does not recognise them. They are never modified or deleted.")
+                Text("Isotope found these files but does not recognise them. It never changes them on its own; right-click one to delete it.")
                     .font(.caption)
             }
         }
+    }
+
+    /// PRD F71: the one way to delete a file Isotope does not track. Always
+    /// asks first — see `pendingDeletion`.
+    @ViewBuilder
+    private func deleteFileButton(_ fileName: String, on drive: ManagedDrive) -> some View {
+        let blocker = store.deleteBlocker(fileName: fileName, on: drive)
+        Button("Delete from Drive…", role: .destructive) { pendingDeletion = fileName }
+            .disabled(blocker != nil)
+            .help(blocker ?? "Delete this file from the drive")
     }
 
     // MARK: - Settings
@@ -352,6 +394,9 @@ private struct AssignmentRow: View {
     let assignment: Assignment
     let driveID: UUID
     let onUpdate: () -> Void
+    let onError: (String) -> Void
+
+    @State private var confirmingRemoval = false
 
     var body: some View {
         let entry = store.entry(id: assignment.entryID)
@@ -408,14 +453,50 @@ private struct AssignmentRow: View {
             Button("Keep as Is (Pin)") { setPolicy(.keepAsIs) }
                 .disabled(assignment.isPinned)
             Divider()
-            Button("Remove Assignment", role: .destructive) {
-                store.removeAssignment(id: assignment.id, from: driveID)
-            }
+            Button("Remove…", role: .destructive) { confirmingRemoval = true }
         }
         .swipeActions {
-            Button("Remove", role: .destructive) {
-                store.removeAssignment(id: assignment.id, from: driveID)
+            Button("Remove", role: .destructive) { confirmingRemoval = true }
+        }
+        // PRD F71: one entry point, two outcomes. Untracking and deleting are
+        // the same decision — "I don't want this here" — made at different
+        // strengths, so they are offered side by side rather than as two menu
+        // items the user has to tell apart.
+        .confirmationDialog("Remove \(title(entry: entry, channel: channel))?",
+                            isPresented: $confirmingRemoval, titleVisibility: .visible) {
+            if deleteBlocker == nil {
+                Button("Remove and Delete ISO", role: .destructive) { remove(deletingFile: true) }
             }
+            Button("Stop Tracking, Keep File") { remove(deletingFile: false) }
+            Button("Cancel", role: .cancel) {}
+        } message: {
+            Text(removalMessage)
+        }
+    }
+
+    private var deleteBlocker: String? {
+        guard let drive = store.drive(id: driveID) else { return "" }
+        return store.deleteBlocker(fileName: assignment.installed?.fileName, on: drive,
+                                   assignmentID: assignment.id)
+    }
+
+    private var removalMessage: String {
+        guard let fileName = assignment.installed?.fileName else {
+            return "Nothing is installed for this assignment, so only the tracking is removed."
+        }
+        if let blocker = deleteBlocker {
+            return "“\(fileName)” stays on the drive: \(blocker.lowercased())."
+        }
+        let size = isoSizeText(store.isoSize(fileName: fileName, on: driveID))
+        let freed = size.isEmpty ? "" : ", freeing\(size.dropFirst(2))"
+        return "Delete ISO removes “\(fileName)” from the drive permanently\(freed). Stop Tracking leaves it there, listed under Found on this drive."
+    }
+
+    private func remove(deletingFile: Bool) {
+        do {
+            try store.removeAssignment(id: assignment.id, from: driveID, deletingFile: deletingFile)
+        } catch {
+            onError(error.localizedDescription)
         }
     }
 

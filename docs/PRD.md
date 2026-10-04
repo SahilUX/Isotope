@@ -297,3 +297,12 @@ The same copy, told two different ways. Scaled to an 8.47 GB ISO, that 22.8 s fl
   The build gap has not been hidden: it is still on the version line, and the up-to-date tick now carries a tooltip saying which build the media holds, which build is current, and that the difference ships through Windows Update.
 
   This is a correction to F46, which introduced `buildBehind` as an advisory, and to F54, which then gave it a button. Both were reasonable in isolation; together they produced a row that nagged forever about something no download could fix.
+
+## 26. v1.12 addendum — deleting ISOs, and eject from the sidebar (2026-10-05)
+
+- **F71** **An ISO can be deleted from the drive.** Until now removing an assignment only stopped tracking it, and nothing on a drive could be deleted except by the update that replaced it. Freeing space meant going to Finder.
+  - **One entry point, two outcomes.** An assignment row's **Remove…** (context menu or swipe) opens one confirmation with **Remove and Delete ISO** and **Stop Tracking, Keep File**. Untracking and deleting are the same decision ("I don't want this here") at different strengths, so they are offered side by side, not as two menu items the user has to tell apart. The dialog names the file and the space it frees.
+  - **Untracked files too.** Rows under "Found on this drive" and "Unrecognised files" have **Delete from Drive…** in their context menu, behind its own confirmation. F7/F22 still hold in the sense that matters: Isotope never deletes these files *on its own*.
+  - **Permanent, not the Trash.** On a removable volume the Trash is `.Trashes` on the same stick, so the space would stay used, and freeing space is the main reason to delete.
+  - **Refused when** the drive is disconnected or read-only, an update is in flight on it, or another assignment still holds the same file. When the delete is refused or fails, the assignment is kept. A successful delete is recorded in Activity with the space freed.
+- **F72** **Eject on the sidebar row.** A connected drive's sidebar row carries an eject button, as Finder's does. It works for Ventoy and flashed drives alike and is disabled while the drive has an update in flight (F23).

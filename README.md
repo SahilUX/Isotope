@@ -66,7 +66,9 @@ Anything not in the catalog can be added as a custom source. There are four dete
 
 Register a mounted Ventoy volume, assign the ISOs you want tracked, and Isotope replaces them in place as new releases ship. It identifies drives by volume UUID and warns if a registered drive is reformatted.
 
-ISOs already sitting on the drive are matched against the catalog and offered under "Found on this drive", one click to start tracking one, or to pin it. Files it can't identify are listed but never touched. Every ISO shows its size, so it is clear where a full stick went.
+ISOs already sitting on the drive are matched against the catalog and offered under "Found on this drive", one click to start tracking one, or to pin it. Files it can't identify are listed, and Isotope never changes them on its own. Every ISO shows its size, so it is clear where a full stick went.
+
+To get rid of an ISO, remove its assignment and choose **Remove and Delete ISO**, or **Stop Tracking, Keep File** to leave it on the stick. Untracked and unrecognised files can be deleted from their right-click menu. Deletes are permanent rather than to the Trash, because on a USB stick the Trash keeps the space in use. The eject button sits on the drive's sidebar row, as in Finder.
 
 ### Flashed drives
 
@@ -129,7 +131,7 @@ ditto "$APP" /Applications/Isotope.app
 
 Or just open `Isotope.xcodeproj` in Xcode and run.
 
-The app is not sandboxed, because raw device access for flashing is incompatible with the App Sandbox. It's signed ad-hoc for personal use; distribution is from source or via Developer ID, not the App Store.
+The app is not sandboxed, because raw device access for flashing is incompatible with the App Sandbox. A source build is signed ad-hoc, so it needs nobody's certificate. `Scripts/release.sh` builds the maintainer's release instead: signed with Developer ID, notarized when a `notarytool` profile is stored, and installed to `/Applications`. Distribution is from source or via Developer ID, not the App Store.
 
 ### Tests
 
@@ -194,7 +196,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested. 250 unit tests in `IsotopeCore`, 209 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested. 250 unit tests in `IsotopeCore`, 217 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

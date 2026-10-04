@@ -410,13 +410,59 @@ extension AppStore {
                                      in: drive.assignments)
     }
 
-    /// Removes tracking for one assignment. The ISO stays on the drive (PRD F22);
-    /// it simply shows up as an unknown file on the next scan.
-    func removeAssignment(id assignmentID: UUID, from driveID: UUID) {
-        guard var drive = drive(id: driveID) else { return }
+    /// Removes tracking for one assignment. By default the ISO stays on the
+    /// drive (PRD F22) and shows up under "Found on this drive" on the next
+    /// scan; `deletingFile` deletes it first (PRD F71). If that delete fails the
+    /// assignment is kept, so the row the user acted on is still there.
+    func removeAssignment(id assignmentID: UUID, from driveID: UUID, deletingFile: Bool = false) throws {
+        guard var drive = drive(id: driveID),
+              let assignment = drive.assignments.first(where: { $0.id == assignmentID }) else { return }
+        if deletingFile, let fileName = assignment.installed?.fileName {
+            try deleteISO(fileName: fileName, on: driveID, removingAssignment: assignment, rescan: false)
+            drive = self.drive(id: driveID) ?? drive
+        }
         drive.assignments.removeAll { $0.id == assignmentID }
         updateDrive(drive)
         scanAndReconcile(driveID: driveID)
+    }
+
+    // MARK: Deleting ISOs (PRD F71)
+
+    /// Why `fileName` cannot be deleted from `drive` right now, or nil when it
+    /// can. The view disables the action and shows this as its help.
+    /// `assignmentID` is the row being removed along with the file: it is the
+    /// one holder of the file that does not count against deleting it.
+    func deleteBlocker(fileName: String?, on drive: ManagedDrive, assignmentID: UUID? = nil) -> String? {
+        guard let fileName else { return "Nothing is installed for this assignment" }
+        guard let info = volumeInfo(for: drive) else { return "Connect the drive to delete its files" }
+        if info.isReadOnly { return "The drive is mounted read-only" }
+        if hasOperationsInFlight(drive) { return "Wait for the drive's updates to finish" }
+        // A pinned copy and a tracker can hold one file between them (an
+        // adopted ISO that was then assigned again); removing one row must not
+        // pull the file out from under the other.
+        let holders = drive.assignments.filter { $0.installed?.fileName == fileName && $0.id != assignmentID }
+        if !holders.isEmpty { return "An assignment on this drive still uses this file" }
+        return nil
+    }
+
+    /// Deletes one ISO from a connected drive, records it in Activity, and
+    /// rescans. A file an assignment still holds is refused unless that
+    /// assignment is the one being removed with it.
+    func deleteISO(fileName: String, on driveID: UUID, removingAssignment assignment: Assignment? = nil,
+                   rescan: Bool = true) throws {
+        guard let drive = drive(id: driveID) else { return }
+        if let reason = deleteBlocker(fileName: fileName, on: drive, assignmentID: assignment?.id) {
+            throw ISODeletionError.blocked(reason)
+        }
+        let size = isoSize(fileName: fileName, on: driveID)
+        try driveProbe.deleteISO(drive.bookmark, drive.isoFolder, fileName)
+        let freed = size.map { " · freed \(ByteCountFormatter.string(fromByteCount: $0, countStyle: .file))" } ?? ""
+        appendHistory(HistoryEvent(driveID: driveID, driveName: drive.displayName,
+                                   entryID: assignment?.entryID ?? "", channelID: assignment?.channelID ?? "",
+                                   fileName: fileName, version: assignment?.installed?.version,
+                                   outcome: .succeeded,
+                                   message: "Deleted \(fileName)\(freed)"))
+        if rescan { scanAndReconcile(driveID: driveID) }
     }
 
     // MARK: Per-drive settings (PRD F6)
@@ -436,11 +482,34 @@ extension AppStore {
 
     // MARK: Eject (PRD F23)
 
+    /// Whether the sidebar's eject button is live: something is attached to
+    /// eject, and nothing is being written to it (PRD F23).
+    func canEject(_ drive: ManagedDrive) -> Bool {
+        guard !hasOperationsInFlight(drive) else { return false }
+        return drive.isFlashed ? attachedDevice(for: drive) != nil : volumeInfo(for: drive) != nil
+    }
+
+    /// One eject for either kind of drive, for callers that do not care which.
+    func ejectAnyDrive(driveID: UUID) throws {
+        guard let drive = drive(id: driveID) else { return }
+        if drive.isFlashed { ejectFlashedDrive(driveID: driveID) } else { try eject(driveID: driveID) }
+    }
+
     func eject(driveID: UUID) throws {
         guard let drive = drive(id: driveID) else { return }
         guard !hasOperationsInFlight(drive) else { return }
         guard let info = volumeInfo(for: drive) else { return }
         try DriveAccess.eject(volumeURL: info.url)
         markDisconnected(volumeUUID: drive.volumeUUID)
+    }
+}
+
+enum ISODeletionError: LocalizedError, Equatable {
+    case blocked(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .blocked(let reason): return "The ISO was not deleted: \(reason.lowercased())."
+        }
     }
 }

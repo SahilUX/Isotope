@@ -1,8 +1,10 @@
+import IsotopeCore
 import SwiftUI
 
 /// Navigation shell (DESIGN §5): sidebar Drives / Catalog / Activity / Settings.
 struct RootView: View {
     @Environment(AppStore.self) private var store
+    @State private var ejectError: String?
 
     var body: some View {
         @Bindable var store = store
@@ -22,6 +24,20 @@ struct RootView: View {
                                 Text(drive.displayName)
                                 Spacer(minLength: 4)
                                 DriveStatusDot(status: store.status(of: drive))
+                                // Finder's sidebar puts eject on the row; so
+                                // does Isotope, for any drive that is plugged in.
+                                if store.isConnected(drive) {
+                                    Button {
+                                        eject(drive)
+                                    } label: {
+                                        Image(systemName: "eject.fill")
+                                    }
+                                    .buttonStyle(.borderless)
+                                    .disabled(!store.canEject(drive))
+                                    .help(store.canEject(drive)
+                                          ? "Eject “\(drive.displayName)”"
+                                          : "Wait for the drive's updates to finish")
+                                }
                             }
                         } icon: {
                             Image(systemName: store.isConnected(drive)
@@ -47,6 +63,20 @@ struct RootView: View {
             detail.frame(minWidth: 560, minHeight: 420)
         }
         .navigationTitle("Isotope")
+        .alert("Eject failed", isPresented: Binding(get: { ejectError != nil },
+                                                    set: { if !$0 { ejectError = nil } })) {
+            Button("OK", role: .cancel) { ejectError = nil }
+        } message: {
+            Text(ejectError ?? "")
+        }
+    }
+
+    private func eject(_ drive: ManagedDrive) {
+        do {
+            try store.ejectAnyDrive(driveID: drive.id)
+        } catch {
+            ejectError = error.localizedDescription
+        }
     }
 
     @ViewBuilder

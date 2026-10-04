@@ -242,7 +242,7 @@ final class DriveManagementTests: XCTestCase {
         let drive = try store.registerDrive(at: url)
         let assignment = try XCTUnwrap(store.addAssignment(entryID: "ubuntu-desktop",
                                                            channelID: "lts", to: drive.id))
-        store.removeAssignment(id: assignment.id, from: drive.id)
+        try store.removeAssignment(id: assignment.id, from: drive.id)
 
         let reloaded = makeStore()
         await reloaded.loadAtLaunch()

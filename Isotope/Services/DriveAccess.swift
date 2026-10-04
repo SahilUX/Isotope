@@ -163,6 +163,21 @@ enum DriveAccess {
         }
     }
 
+    /// Permanently deletes one ISO from a drive's ISO folder (PRD F71). Not
+    /// the Trash: on a USB stick that only moves the file into `.Trashes` on
+    /// the same volume, and freeing the space is the reason to delete at all.
+    /// `fileName` must be a bare name — a path is refused rather than resolved.
+    static func deleteISO(bookmark: Data, isoFolder: String, fileName: String) throws {
+        guard !fileName.isEmpty, !fileName.contains("/"), fileName != ".", fileName != ".." else {
+            throw CocoaError(.fileNoSuchFile)
+        }
+        let volume = try resolveBookmark(bookmark).url
+        try withAccess(to: volume) { volume in
+            let file = isoFolderURL(volume: volume, isoFolder: isoFolder).appendingPathComponent(fileName)
+            try FileManager.default.removeItem(at: file)
+        }
+    }
+
     // MARK: - Eject
 
     /// PRD F23 one-click eject. `NSWorkspace` handles the unmount so no
@@ -193,6 +208,10 @@ struct DriveProbe: Sendable {
     /// them simply reports none.
     var isoSizes: @Sendable (Data, String) -> [String: Int64] = { bookmark, folder in
         DriveAccess.isoSizes(bookmark: bookmark, isoFolder: folder)
+    }
+    /// (bookmark, isoFolder, fileName) → delete that ISO (PRD F71).
+    var deleteISO: @Sendable (Data, String, String) throws -> Void = { bookmark, folder, fileName in
+        try DriveAccess.deleteISO(bookmark: bookmark, isoFolder: folder, fileName: fileName)
     }
     var windowsBuild: @Sendable (Data, String, String) -> String? = { bookmark, folder, fileName in
         guard let resolved = try? DriveAccess.resolveBookmark(bookmark) else { return nil }
