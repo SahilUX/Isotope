@@ -68,6 +68,7 @@ struct WindowsManualSheet: View {
                 for: item,
                 catalogPattern: store.mediaFileNamePattern(entryID: item.entryID,
                                                            channelID: item.channelID))
+            watcher.excludedPatterns = store.otherMediaFileNamePatterns(excludingEntryID: item.entryID)
             watcher.start()
             tryAutomaticDownload()
         }
@@ -170,7 +171,7 @@ struct WindowsManualSheet: View {
                     .font(.callout).foregroundStyle(.secondary)
             }
             if watcher.candidates.isEmpty, !watcher.otherISOs.isEmpty {
-                Text("Nothing here is named the way Microsoft names this image, so these are every ISO in the folder, newest first. Pick the one you downloaded.")
+                Text("Nothing here is named the way Microsoft names this image, so these are the other ISOs in the folder, newest first — leaving out ones Isotope recognises as a different image. Pick the one you downloaded.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             ForEach(watcher.candidates + watcher.otherISOs) { candidate in

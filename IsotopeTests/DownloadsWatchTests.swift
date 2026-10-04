@@ -79,6 +79,43 @@ final class DownloadsWatchTests: XCTestCase {
                        ["some-windows-copy.iso", "ubuntu-24.04.4-desktop-amd64.iso"])
     }
 
+    // MARK: - Not someone else's media
+
+    /// The report: the Windows 11 sheet offered `Win10_22H2_English_x64v1.iso`
+    /// because the fallback listed *every* ISO. A file another catalog entry
+    /// recognises is that entry's media, not a renamed Windows 11.
+    func testTheFallbackLeavesOutOtherCatalogImages() throws {
+        let win10Pattern =
+            #"^Win10(?:_(\d{2}H\d)|_\d{4})?_[A-Za-z]+(?:[ _-][A-Za-z]+)*_(?:x64|x32|x86|arm64)(?:_?v\d+)?\.iso$"#
+        try write("Win10_22H2_English_x64v1.iso")
+        try write("Windows11_Client_x64_en-us_26300_9457.iso")
+
+        let found = DownloadsWatcher.scan(folder: folder, pattern: catalogPattern,
+                                          excluding: [win10Pattern])
+        XCTAssertTrue(found.matching.isEmpty)
+        XCTAssertEqual(found.other.map(\.fileName), ["Windows11_Client_x64_en-us_26300_9457.iso"])
+    }
+
+    /// Against the shipped catalog: no other entry's pattern is so loose that
+    /// it swallows a renamed Windows 11 ISO, and Windows 10's media is excluded.
+    func testTheShippedCatalogExcludesWindows10ButNotWindows11() async throws {
+        let root = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("IsotopeWatchCatalog-\(UUID().uuidString)")
+        defer { try? FileManager.default.removeItem(at: root) }
+        let catalog = Bundle(for: AppStore.self).url(forResource: "catalog", withExtension: "json")
+        let store = AppStore(locations: StoreLocations(root: root), catalogResourceURL: catalog)
+        await store.loadAtLaunch()
+        let excluded = store.otherMediaFileNamePatterns(excludingEntryID: "windows-11")
+        XCTAssertFalse(excluded.isEmpty)
+
+        try write("Win10_22H2_English_x64v1.iso")
+        try write("Windows11_Client_x64_en-us_26300_9457.iso")
+        try write("my-windows-11.iso")
+        let found = DownloadsWatcher.scan(folder: folder, pattern: catalogPattern, excluding: excluded)
+        XCTAssertEqual(Set(found.other.map(\.fileName)),
+                       ["Windows11_Client_x64_en-us_26300_9457.iso", "my-windows-11.iso"])
+    }
+
     func testNewestFirst() throws {
         let older = try write("Win11_24H2_English_x64.iso")
         let newer = try write("Win11_25H2_English_x64_v2.iso")

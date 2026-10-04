@@ -256,6 +256,15 @@ extension AppStore {
         return pattern
     }
 
+    /// Every other entry's media pattern, so the Downloads watch does not offer
+    /// `Win10_22H2_English_x64.iso` as a fallback for Windows 11.
+    func otherMediaFileNamePatterns(excludingEntryID entryID: String) -> [String] {
+        allEntries.filter { $0.id != entryID }
+            .flatMap(\.channels)
+            .compactMap { $0.provider.fileNamePattern }
+            .filter { !$0.isEmpty }
+    }
+
     /// PRD F48/F49: the download-connector configuration for a Windows channel.
     func windowsMediaCatalog(entryID: String, channelID: String) -> WindowsMediaCatalog? {
         guard let provider = entry(id: entryID)?.channel(id: channelID)?.provider,
