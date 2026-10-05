@@ -196,7 +196,7 @@ actor FlashEngine {
         switch error {
         case .checksumMismatch(let fileName): return .checksumMismatch(fileName: fileName)
         case .cancelled: return .cancelled
-        case .transport, .sizeMismatch: return .downloadFailed(error.localizedDescription)
+        case .transport, .sizeMismatch, .httpStatus: return .downloadFailed(error.localizedDescription)
         }
     }
 

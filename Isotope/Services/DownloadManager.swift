@@ -72,6 +72,7 @@ enum DownloadError: LocalizedError, Equatable {
     case cancelled
     case transport(String)
     case sizeMismatch(expected: Int64, actual: Int64)
+    case httpStatus(Int, host: String)
 
     var errorDescription: String? {
         switch self {
@@ -86,6 +87,9 @@ enum DownloadError: LocalizedError, Equatable {
             let e = ByteCountFormatter.string(fromByteCount: expected, countStyle: .file)
             let a = ByteCountFormatter.string(fromByteCount: actual, countStyle: .file)
             return "The download finished at \(a) but the source advertised \(e). The file was discarded; try again."
+        case .httpStatus(let code, let host):
+            let reason = HTTPURLResponse.localizedString(forStatusCode: code)
+            return "\(host) refused the download (HTTP \(code), \(reason)). The source may have moved; check the catalog entry."
         }
     }
 }
@@ -461,6 +465,12 @@ actor DownloadManager: ISOProviding {
                 continuation.resume(throwing: DownloadError.cancelled)
                 return
             }
+            // The server answered with an error page: nothing to resume.
+            if let downloadError = error as? DownloadError {
+                discardResumable(key: key)
+                continuation.resume(throwing: downloadError)
+                return
+            }
             // A real failure keeps its resume data so relaunch can offer it (F19).
             if let data { storeResumeDataSync(data, key: key) }
             record(request: request, bytes: bytes, paused: false)
@@ -654,6 +664,17 @@ final class DownloadSessionDelegate: NSObject, URLSessionDownloadDelegate, @unch
 
     func urlSession(_ session: URLSession, downloadTask: URLSessionDownloadTask,
                     didFinishDownloadingTo location: URL) {
+        // URLSession finishes a 403 or 404 like any other download, leaving the
+        // error page where the ISO should be. Hashing that page reported a
+        // checksum mismatch that no retry could fix.
+        if let http = downloadTask.response as? HTTPURLResponse,
+           !(200..<300).contains(http.statusCode) {
+            try? FileManager.default.removeItem(at: location)
+            let host = http.url?.host ?? downloadTask.originalRequest?.url?.host ?? "The server"
+            complete(downloadTask.taskIdentifier,
+                     .failure(DownloadError.httpStatus(http.statusCode, host: host)))
+            return
+        }
         let destination = staging.appendingPathComponent("download-\(UUID().uuidString)")
         do {
             try FileManager.default.createDirectory(at: staging, withIntermediateDirectories: true)

@@ -126,6 +126,23 @@ final class DownloadConcurrencyTests: XCTestCase {
         await manager.endUse(cacheKey: local.cacheKey)
     }
 
+    /// A 403 is a refusal, not an ISO. Hashing the error page used to report a
+    /// checksum mismatch that no retry could fix (Arch, 0.2.9).
+    func testAnHTTPErrorFailsAsSuchAndIsNotResumable() async throws {
+        let manager = makeManager(maxConcurrent: 1)
+        let refused = ISORequest(sourceURL: URL(string: "https://downloads.test/forbidden.iso")!,
+                                 fileName: "forbidden.iso", sha256: String(repeating: "0", count: 64))
+        do {
+            _ = try await manager.ensureLocalISO(refused) { _, _ in }
+            XCTFail("a 403 must not produce a local ISO")
+        } catch let error as DownloadError {
+            XCTAssertEqual(error, .httpStatus(403, host: "downloads.test"))
+        }
+        let manifest = JSONStore.load([InterruptedDownload].self, from: locations.resumeManifest,
+                                      default: [])
+        XCTAssertTrue(manifest.isEmpty, "a refusal is not offered for resume")
+    }
+
     /// A quit while a download is in flight records it as resumable (PRD F19).
     func testQuitRecordsInFlightDownloadsAsResumable() async throws {
         let manager = makeManager(maxConcurrent: 2)
@@ -196,6 +213,14 @@ final class TrickleProtocol: URLProtocol, @unchecked Sendable {
                                              headerFields: ["Content-Length": "\(Self.totalBytes)",
                                                             "Accept-Ranges": "bytes"])
         else { return }
+        if url.lastPathComponent.hasPrefix("forbidden") {
+            let refusal = HTTPURLResponse(url: url, statusCode: 403, httpVersion: "HTTP/1.1",
+                                          headerFields: nil)!
+            client?.urlProtocol(self, didReceive: refusal, cacheStoragePolicy: .notAllowed)
+            client?.urlProtocol(self, didLoad: Data("<h1>403 Forbidden</h1>".utf8))
+            client?.urlProtocolDidFinishLoading(self)
+            return
+        }
         client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
         let chunk = Data(repeating: 0x5A, count: Self.chunkBytes)
         DispatchQueue.global().async { [weak self] in

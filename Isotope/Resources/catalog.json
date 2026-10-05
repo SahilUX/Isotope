@@ -1604,6 +1604,7 @@
         "provider": {
           "mechanism": "checksumFile",
           "url": "https://archlinux.org/iso/latest/sha256sums.txt",
+          "downloadBase": "https://geo.mirror.pkgbuild.com/iso/latest/",
           "filePattern": "^archlinux-(\\d{4}\\.\\d{2}\\.\\d{2})-x86_64\\.iso$"
         }
       }
