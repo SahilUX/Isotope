@@ -50,6 +50,58 @@ final class ChecksumFileProviderTests: XCTestCase {
         XCTAssertEqual(release.version.raw, "24.04.4")
     }
 
+    private let seriesIndex = IndexStep(url: URL(string: "https://releases.example/")!,
+                                        pattern: #"href="(\d+\.\d+)/""#,
+                                        target: "https://releases.example/{version}/SHA256SUMS")
+    private let seriesListing = #"<a href="24.04/">24.04/</a> <a href="26.04/">26.04/</a>"#
+    private let ubuntuPattern = #"^ubuntu-(\d+\.\d+(?:\.\d+)?)-desktop-amd64\.iso$"#
+
+    /// Ubuntu MATE skipped 26.04: its series directory is a 404, so the LTS
+    /// before it is the latest there is.
+    func testAMissingNewestSeriesFallsBackToTheOneBefore() async throws {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", text: seriesListing)
+        http.stub(sumsURL, fixture: "ubuntu-SHA256SUMS.txt")
+        let release = try await ChecksumFileProvider(http: http).fetchLatest(config: .checksumFile(
+            url: URL(string: sumsURL)!, filePattern: ubuntuPattern, index: seriesIndex))
+
+        XCTAssertEqual(release.version.raw, "24.04.4")
+        XCTAssertEqual(http.requestedGETs.map(\.absoluteString),
+                       ["https://releases.example/", "https://releases.example/26.04/SHA256SUMS", sumsURL])
+    }
+
+    /// Parrot 7.4 shipped a hash file with MD5s only. The newest release with a
+    /// SHA-256 is offered rather than nothing, and never the unverifiable one.
+    func testANewestSeriesWithoutSHA256FallsBackToTheOneBefore() async throws {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", text: seriesListing)
+        http.stub("https://releases.example/26.04/SHA256SUMS",
+                  text: "md5\n67937cfacadc11042acd47f1ddba5f7b  ubuntu-26.04-desktop-amd64.iso\n")
+        http.stub(sumsURL, fixture: "ubuntu-SHA256SUMS.txt")
+        let release = try await ChecksumFileProvider(http: http).fetchLatest(config: .checksumFile(
+            url: URL(string: sumsURL)!, filePattern: ubuntuPattern, index: seriesIndex))
+
+        XCTAssertEqual(release.version.raw, "24.04.4")
+        XCTAssertTrue(release.isVerifiable)
+    }
+
+    /// A server error says nothing about whether the release exists, so it is
+    /// reported, not papered over with an older version.
+    func testAServerErrorOnTheNewestSeriesDoesNotFallBack() async {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", text: seriesListing)
+        http.stub("https://releases.example/26.04/SHA256SUMS", text: "busy", statusCode: 503)
+        http.stub(sumsURL, fixture: "ubuntu-SHA256SUMS.txt")
+        do {
+            _ = try await ChecksumFileProvider(http: http).fetchLatest(config: .checksumFile(
+                url: URL(string: sumsURL)!, filePattern: ubuntuPattern, index: seriesIndex))
+            XCTFail("expected the 503 to surface")
+        } catch {
+            XCTAssertEqual(error as? ProviderError,
+                           .httpStatus(503, URL(string: "https://releases.example/26.04/SHA256SUMS")!))
+        }
+    }
+
     func testNoMatchReportsPatternAndSnippet() async {
         let http = MockHTTPClient()
         http.stub(sumsURL, fixture: "ubuntu-SHA256SUMS.txt")

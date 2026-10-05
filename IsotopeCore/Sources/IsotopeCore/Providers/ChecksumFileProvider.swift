@@ -12,10 +12,32 @@ public struct ChecksumFileProvider: VersionProvider {
         guard case .checksumFile(let url, let filePattern, let index, let downloadBase) = config else {
             throw ProviderError.unsupportedForMechanism("ChecksumFileProvider was given a \(config.mechanism.rawValue) config.")
         }
-        let target = try await resolveTarget(base: url, index: index, http: http)
+        // The newest indexed version can lack a usable SHA-256: Ubuntu MATE
+        // skipped 26.04, and Parrot 7.4 shipped with MD5s only. Fall back to the
+        // newest version that has one rather than offer nothing, or something
+        // unverified. The first failure is what gets reported if none do.
+        let targets = try await resolveTargets(base: url, index: index, http: http,
+                                               limit: Self.indexFallbackDepth)
+        let matcher = try PatternMatcher(filePattern)
+        var firstFailure: Error?
+        for target in targets {
+            do {
+                return try await release(from: target, matcher: matcher,
+                                         filePattern: filePattern, downloadBase: downloadBase)
+            } catch let error as ProviderError where error.allowsIndexFallback {
+                firstFailure = firstFailure ?? error
+            }
+        }
+        throw firstFailure!
+    }
+
+    /// How many indexed versions to try, newest first.
+    static let indexFallbackDepth = 3
+
+    private func release(from target: URL, matcher: PatternMatcher, filePattern: String,
+                         downloadBase: URL?) async throws -> Release {
         let response = try await http.requireData(from: target)
         let text = response.text
-        let matcher = try PatternMatcher(filePattern)
 
         let candidates: [VersionCandidate] = ChecksumParsing.lines(in: text).compactMap { line in
             guard let raw = matcher.capturedVersion(in: line.fileName),
@@ -34,5 +56,17 @@ public struct ChecksumFileProvider: VersionProvider {
 
         return Release(version: best.version, isoURL: isoURL, fileName: best.fileName,
                        sha256: best.sha256)
+    }
+}
+
+private extension ProviderError {
+    /// A version directory that is missing, or has no SHA-256 for the file.
+    /// Anything else (a timeout, a 5xx) is not a reason to go back a version.
+    var allowsIndexFallback: Bool {
+        switch self {
+        case .noMatch: return true
+        case .httpStatus(let code, _): return code == 404
+        default: return false
+        }
     }
 }

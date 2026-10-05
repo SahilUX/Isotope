@@ -42,22 +42,31 @@ public struct VersionResolver: VersionProvider {
 extension VersionProvider {
     /// Runs an optional `IndexStep` and returns the URL the real request should use.
     func resolveTarget(base: URL, index: IndexStep?, http: HTTPClient) async throws -> URL {
-        guard let index else { return base }
+        try await resolveTargets(base: base, index: index, http: http, limit: 1)[0]
+    }
+
+    /// The index's versions as target URLs, newest first, at most `limit` of
+    /// them. Never empty: no match in the index throws.
+    func resolveTargets(base: URL, index: IndexStep?, http: HTTPClient,
+                        limit: Int) async throws -> [URL] {
+        guard let index else { return [base] }
         let response = try await http.requireData(from: index.url)
         let text = response.text
         let matcher = try PatternMatcher(index.pattern)
-        let versions: [VersionCandidate] = matcher.matches(in: text).compactMap { groups in
-            let raw = groups.count > 1 ? groups[1] : groups[0]
-            guard let token = VersionToken.parse(raw) else { return nil }
-            return VersionCandidate(version: token, fileName: raw)
+        let versions: [VersionToken] = matcher.matches(in: text).compactMap { groups in
+            VersionToken.parse(groups.count > 1 ? groups[1] : groups[0])
         }
-        guard let best = versions.highest else {
+        guard !versions.isEmpty else {
             throw ProviderError.noMatch(pattern: index.pattern, source: index.url,
                                         snippet: ProviderError.snippet(text))
         }
-        let resolved = index.resolvedTarget(version: best.version.raw)
-        guard let url = URL(string: resolved) else { throw ProviderError.unusableURL(resolved) }
-        return url
+        var seen = Set<String>()
+        let newestFirst = versions.sorted { $1 < $0 }.filter { seen.insert($0.raw).inserted }
+        return try newestFirst.prefix(max(1, limit)).map { version in
+            let resolved = index.resolvedTarget(version: version.raw)
+            guard let url = URL(string: resolved) else { throw ProviderError.unusableURL(resolved) }
+            return url
+        }
     }
 
     /// Fetches a `.sha256`-style sidecar; a missing sidecar is not an error
