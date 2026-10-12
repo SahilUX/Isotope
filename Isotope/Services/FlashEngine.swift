@@ -88,6 +88,7 @@ struct FlashRequest: Sendable, Identifiable {
     var verifyAfterWrite: Bool
     /// PRD F31: the engine refuses a confirmation that is not from this session.
     var confirmedAt: Date = Date()
+    var localFile: URL? = nil
 }
 
 /// What a finished flash writes back to the drive record.
@@ -214,37 +215,54 @@ actor FlashEngine {
 
         // 2 — the image itself: download, checksum-verify and cache it exactly
         //     the way a Ventoy update does (PRD F29 "identical to F18").
-        guard let sourceURL = request.release.isoURL,
-              let finalName = DownloadArtifact.placedFileName(for: request.release)
-        else { throw FlashError.noDownloadURL(entryName: request.title) }
-        let publishedName = request.release.fileName.isEmpty
-            ? sourceURL.lastPathComponent : request.release.fileName
-        let isoRequest = ISORequest(
-            sourceURL: sourceURL, fileName: publishedName, sha256: request.release.sha256,
-            expectedSizeBytes: request.release.sizeBytes,
-            context: DownloadContext(driveID: request.driveID, driveName: request.driveName,
-                                     entryID: request.entryID, channelID: request.channelID,
-                                     assignmentID: request.assignmentID))
-        cacheKeys[request.id] = isoRequest.cacheKey
-        await store.setOperationCacheKey(id: request.id, key: isoRequest.cacheKey)
-        if flag.isSet { throw FlashError.cancelled }
-
-        let operationID = request.id
-        let store = self.store
-        let local = try await downloads.ensureLocalISO(isoRequest) { stage, progress in
-            Task { @MainActor in
-                store.updateOperationProgress(id: operationID, stage: stage, progress: progress)
+        let finalName: String
+        let local: LocalISO
+        let scoped = request.localFile?.startAccessingSecurityScopedResource() ?? false
+        defer { if scoped { request.localFile?.stopAccessingSecurityScopedResource() } }
+        if let source = request.localFile {
+            do {
+                let file = try LocalFile(url: source)
+                guard file.canFlash else {
+                    throw FlashError.downloadFailed("Choose an ISO or raw IMG image to flash.")
+                }
+                guard await store.localFlashSourceIsSafe(source, bsdName: request.bsdName) else {
+                    throw FlashError.downloadFailed("The image is on the USB device being erased. Move it to your Mac first.")
+                }
+                finalName = file.name
+                local = LocalISO(url: source, fileName: file.name, sizeBytes: file.sizeBytes, cacheKey: "")
+            } catch let error as FlashError { throw error }
+            catch { throw FlashError.downloadFailed(error.localizedDescription) }
+        } else {
+            guard let sourceURL = request.release.isoURL,
+                  let name = DownloadArtifact.placedFileName(for: request.release)
+            else { throw FlashError.noDownloadURL(entryName: request.title) }
+            finalName = name
+            let publishedName = request.release.fileName.isEmpty
+                ? sourceURL.lastPathComponent : request.release.fileName
+            let isoRequest = ISORequest(
+                sourceURL: sourceURL, fileName: publishedName, sha256: request.release.sha256,
+                expectedSizeBytes: request.release.sizeBytes,
+                context: DownloadContext(driveID: request.driveID, driveName: request.driveName,
+                                         entryID: request.entryID, channelID: request.channelID,
+                                         assignmentID: request.assignmentID))
+            cacheKeys[request.id] = isoRequest.cacheKey
+            await store.setOperationCacheKey(id: request.id, key: isoRequest.cacheKey)
+            if flag.isSet { throw FlashError.cancelled }
+            let operationID = request.id
+            let store = self.store
+            local = try await downloads.ensureLocalISO(isoRequest) { stage, progress in
+                Task { @MainActor in
+                    store.updateOperationProgress(id: operationID, stage: stage, progress: progress)
+                }
             }
         }
-        // PRD F47: the image is on the device once this returns; the cached
-        // copy is then a duplicate of something the user is holding in their
-        // hand. `flashed` is set only on the success path, so a failed flash
-        // keeps the download for the retry.
         var flashed = false
         defer {
-            Task { [downloads, store, flashed] in
-                let wanted = await store.discardsCacheAfterPlacement
-                await downloads.endUse(cacheKey: local.cacheKey, discard: flashed && wanted)
+            if request.localFile == nil {
+                Task { [downloads, store, flashed] in
+                    let wanted = await store.discardsCacheAfterPlacement
+                    await downloads.endUse(cacheKey: local.cacheKey, discard: flashed && wanted)
+                }
             }
         }
         if flag.isSet { throw FlashError.cancelled }
@@ -293,6 +311,14 @@ actor FlashEngine {
     /// PRD F29/F31: the gates run against the device's *current* state, every
     /// time, never against what registration recorded.
     private func checkGates(_ request: FlashRequest, isoSizeBytes: Int64?) async throws {
+        if let source = request.localFile {
+            guard await store.localFlashTargetIsCurrent(driveID: request.driveID, bsdName: request.bsdName) else {
+                throw FlashError.confirmationExpired
+            }
+            guard await store.localFlashSourceIsSafe(source, bsdName: request.bsdName) else {
+                throw FlashError.downloadFailed("The image is on the USB device being erased. Move it to your Mac first.")
+            }
+        }
         guard let description = await io.describe(bsdName: request.bsdName) else {
             throw FlashError.deviceNotFound(driveName: request.deviceName)
         }
@@ -333,11 +359,17 @@ actor FlashEngine {
                     }
                     if count == 0 { break }
                     written += Int64(count)
+                    guard written <= total else {
+                        throw FlashError.writeFailed("The image changed size during the flash.")
+                    }
                     let progress = rate.record(written: written, total: total)
                     guard throttle.shouldEmit(force: written >= total) else { continue }
                     Task { @MainActor in
                         store.updateOperationProgress(id: operationID, stage: nil, progress: progress)
                     }
+                }
+                guard written == total else {
+                    throw FlashError.writeFailed("The image changed size during the flash.")
                 }
                 try handle.finish()
                 return hasher.finalizeHex()

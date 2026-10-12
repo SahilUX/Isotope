@@ -77,6 +77,8 @@ final class AppStore {
     /// tests can exercise both answers without touching the network.
     var windowsResolver: WindowsDownloadResolving = WindowsDownloadResolver()
 
+    var localFiles: [LocalFile] = []
+
     var selection: SidebarSelection? = .drives
 
     /// PRD F12: default 6 h while the app runs; configurable in Settings.
@@ -412,6 +414,7 @@ enum SidebarSelection: Hashable {
     case drives
     case drive(UUID)
     case catalog
+    case localFiles
     case activity
     case settings
 }

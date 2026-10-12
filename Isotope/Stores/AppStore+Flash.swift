@@ -60,6 +60,7 @@ struct FlashPlan: Identifiable, Sendable {
     /// Non-nil when a gate already refuses this device; the dialog shows the
     /// reason and offers no Flash button.
     var gateFailure: FlashGateFailure?
+    var localFile: URL? = nil
 
     var deviceSizeBytes: Int64 { device.sizeBytes }
     var canFlash: Bool { gateFailure == nil }
@@ -274,7 +275,7 @@ extension AppStore {
                                    channelID: plan.channelID, title: plan.title,
                                    release: plan.release, bsdName: plan.device.bsdName,
                                    deviceName: plan.device.displayName,
-                                   verifyAfterWrite: verify)
+                                   verifyAfterWrite: verify, localFile: plan.localFile)
         Task { await engine.enqueue(request) }
     }
 
@@ -344,8 +345,12 @@ extension AppStore {
     /// PRD F27/F29: the fresh volume UUID is recorded for display, the
     /// assignment is marked installed, and any previous failure state clears.
     private func applyFlashResult(_ flashed: FlashedImage, request: FlashRequest) {
-        guard var drive = drive(id: request.driveID),
-              let index = drive.assignments.firstIndex(where: { $0.id == request.assignmentID })
+        guard var drive = drive(id: request.driveID) else { return }
+        if request.localFile != nil {
+            drive.assignments = [Assignment(id: request.assignmentID, entryID: request.entryID,
+                                            channelID: request.channelID, updatePolicy: .keepAsIs)]
+        }
+        guard let index = drive.assignments.firstIndex(where: { $0.id == request.assignmentID })
         else { return }
         drive.assignments[index].installed = InstalledISO(fileName: flashed.fileName,
                                                           version: flashed.version,

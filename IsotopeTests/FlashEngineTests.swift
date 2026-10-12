@@ -77,6 +77,73 @@ final class FlashEngineTests: XCTestCase {
         await engine.drain()
     }
 
+    private func attachLocalDevice(to store: AppStore, mount: URL? = nil) {
+        store.attachedDevices = [FlashDevice(bsdName: "disk4", displayName: "SanDisk Cruzer Blade",
+                                            sizeBytes: 32 << 30, isWholeDisk: true, isExternal: true,
+                                            isRemovableOrEjectable: true, isUSB: true, isBootDisk: false,
+                                            hardwareID: store.drives.first?.hardwareID,
+                                            volumeNames: [], volumeUUIDs: [],
+                                            volumeMountPoints: mount.map { [$0] } ?? [])]
+    }
+
+    func testLocalFlashUsesOwnImageAndPreservesItWithoutCacheAccess() async throws {
+        let (store, drive) = await makeStore()
+        attachLocalDevice(to: store)
+        let provider = FakeISOProvider(behaviour: .failure(DownloadError.httpStatus(500, host: "example.test")))
+        let io = FakeFlashDeviceIO(description: device())
+        let engine = FlashEngine(store: store, downloads: provider, io: io, hashing: store.hashing)
+        var localRequest = request(drive: drive)
+        localRequest.localFile = isoURL
+        localRequest.entryID = "local-file"
+        localRequest.assignmentID = UUID()
+        await run(engine, localRequest)
+        XCTAssertEqual(io.written, try Data(contentsOf: isoURL))
+        XCTAssertEqual(io.readOpenCount, 1)
+        XCTAssertTrue(provider.requests.isEmpty)
+        XCTAssertTrue(provider.endedKeys.isEmpty)
+        XCTAssertEqual(store.operations.first?.phase, .completed)
+        XCTAssertEqual(store.drive(id: drive.id)?.singleAssignment?.installed?.fileName, isoURL.lastPathComponent)
+        XCTAssertTrue(store.drive(id: drive.id)?.singleAssignment?.isPinned == true)
+    }
+
+    func testLocalFlashRefusesImageOnDestinationBeforeUnmounting() async throws {
+        let (store, drive) = await makeStore()
+        attachLocalDevice(to: store, mount: root)
+        let io = FakeFlashDeviceIO(description: device())
+        var localRequest = request(drive: drive)
+        localRequest.localFile = isoURL
+        await run(makeEngine(store: store, io: io), localRequest)
+        XCTAssertEqual(io.unmountCount, 0)
+        XCTAssertTrue(io.written.isEmpty)
+        XCTAssertTrue(store.operations.first?.errorMessage?.contains("being erased") == true)
+        XCTAssertNil(store.drive(id: drive.id)?.flashFailure)
+    }
+
+    func testMissingLocalImageDoesNotUnmountOrEraseUSB() async throws {
+        let (store, drive) = await makeStore()
+        attachLocalDevice(to: store)
+        let io = FakeFlashDeviceIO(description: device())
+        var localRequest = request(drive: drive)
+        localRequest.localFile = root.appendingPathComponent("missing.img")
+        await run(makeEngine(store: store, io: io), localRequest)
+        XCTAssertEqual(io.unmountCount, 0)
+        XCTAssertTrue(io.written.isEmpty)
+        XCTAssertNil(store.drive(id: drive.id)?.flashFailure)
+    }
+
+    func testLocalFlashRefusesDeviceWhoseIdentityChangedAfterConfirmation() async throws {
+        let (store, drive) = await makeStore()
+        attachLocalDevice(to: store)
+        store.attachedDevices[0].hardwareID = HardwareID(vendorID: 1, productID: 2, serialNumber: "OTHER")
+        let io = FakeFlashDeviceIO(description: device())
+        var localRequest = request(drive: drive)
+        localRequest.localFile = isoURL
+        await run(makeEngine(store: store, io: io), localRequest)
+        XCTAssertEqual(io.unmountCount, 0)
+        XCTAssertTrue(io.written.isEmpty)
+        XCTAssertTrue(store.operations.first?.errorMessage?.contains("expired") == true)
+    }
+
     // MARK: - Happy path
 
     func testSuccessfulFlashWritesVerifiesAndRecordsTheResult() async throws {
