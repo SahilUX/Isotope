@@ -15,6 +15,8 @@ struct RegisterDriveSheet: View {
     @State private var selectedDevice: FlashDevice.ID?
     @State private var selectedEntryID: String?
     @State private var selectedChannelID: String?
+    @State private var selectedLocalFile: LocalFile?
+    @State private var flashPlan: FlashPlan?
     /// PRD F40: what the selected stick's volume label says it already holds.
     @State private var detectedMatch: VolumeLabelMatch?
     @State private var error: String?
@@ -44,7 +46,7 @@ struct RegisterDriveSheet: View {
                 Spacer()
                 Button("Cancel", role: .cancel) { dismiss() }
                     .keyboardShortcut(.cancelAction)
-                Button(kind == .ventoy ? "Choose Volume…" : "Register") { register() }
+                Button(kind == .ventoy ? "Choose Volume…" : selectedEntryID == "local-file" ? "Continue…" : "Register") { register() }
                     .keyboardShortcut(.defaultAction)
                     .buttonStyle(.borderedProminent)
                     .disabled(kind == .flashed && !canRegisterFlashed)
@@ -54,6 +56,25 @@ struct RegisterDriveSheet: View {
         .frame(width: 520)
         .onAppear { monitor.refreshDevices() }
         .onChange(of: selectedDevice) { _, deviceID in preselectDetectedImage(deviceID: deviceID) }
+        .onChange(of: selectedEntryID) { _, entryID in
+            if entryID == "local-file" { chooseLocalFile() }
+        }
+        .sheet(item: $flashPlan) { plan in
+            FlashConfirmationSheet(plan: plan, verifyByDefault: store.settings.flashVerification) { verify in
+                do {
+                    try store.startLocalFlash(plan, verify: verify)
+                    requestNotificationPermission()
+                    if let drive = store.drives.first(where: {
+                        $0.isFlashed && DeviceEnumerator.device(matching: $0, in: [plan.device]) != nil
+                    }) {
+                        store.selection = .drive(drive.id)
+                    }
+                    dismiss()
+                } catch {
+                    self.error = error.localizedDescription
+                }
+            }
+        }
     }
 
     /// PRD F40: picking a stick that already carries a recognisable image
@@ -61,6 +82,7 @@ struct RegisterDriveSheet: View {
     /// A preselection, never a decision — the pickers stay editable.
     private func preselectDetectedImage(deviceID: FlashDevice.ID?) {
         detectedMatch = nil
+        guard selectedEntryID != "local-file" else { return }
         guard let deviceID,
               let device = store.registrableDevices().first(where: { $0.id == deviceID }),
               let match = store.detectedContents(for: device),
@@ -127,6 +149,7 @@ struct RegisterDriveSheet: View {
             // PRD F32: entries with no direct ISO (Windows) are not offered.
             // PRD F38: grouped by organization, so flavours sit under Ubuntu.
             Picker("Entry", selection: $selectedEntryID) {
+                Text("Local file…").tag(String?.some("local-file"))
                 Text("Choose…").tag(String?.none)
                 ForEach(store.flashableEntries.groupedByOrganization(), id: \.organization) { group in
                     Section(group.organization) {
@@ -137,6 +160,13 @@ struct RegisterDriveSheet: View {
                 }
             }
             .labelsHidden()
+            if selectedEntryID == "local-file", let file = selectedLocalFile {
+                HStack {
+                    Text(file.name).lineLimit(1).help(file.url.path)
+                    Button("Choose another…") { chooseLocalFile() }
+                }
+                .font(.caption)
+            }
             if let channels = selectedEntry?.flashableChannels, channels.count > 1 {
                 Picker("Channel", selection: $selectedChannelID) {
                     ForEach(channels) { channel in
@@ -163,7 +193,8 @@ struct RegisterDriveSheet: View {
     }
 
     private var canRegisterFlashed: Bool {
-        selectedDevice != nil && resolvedChannelID != nil
+        selectedDevice != nil && (selectedEntryID == "local-file"
+            ? selectedLocalFile != nil : resolvedChannelID != nil)
     }
 
     // MARK: - Actions
@@ -202,8 +233,13 @@ struct RegisterDriveSheet: View {
 
     private func registerFlashed() {
         guard let deviceID = selectedDevice,
-              let device = store.registrableDevices().first(where: { $0.id == deviceID }),
-              let entryID = selectedEntryID, let channelID = resolvedChannelID else { return }
+              let device = store.registrableDevices().first(where: { $0.id == deviceID }) else { return }
+        if selectedEntryID == "local-file", let file = selectedLocalFile {
+            do { flashPlan = try store.localFlashPlan(file, device: device) }
+            catch { self.error = error.localizedDescription }
+            return
+        }
+        guard let entryID = selectedEntryID, let channelID = resolvedChannelID else { return }
         do {
             // PRD F40: the detected version only counts when the user kept the
             // entry it was detected for.
@@ -216,6 +252,26 @@ struct RegisterDriveSheet: View {
             dismiss()
         } catch {
             self.error = error.localizedDescription
+        }
+    }
+
+    private func chooseLocalFile() {
+        let panel = NSOpenPanel()
+        panel.canChooseDirectories = false
+        panel.allowsMultipleSelection = false
+        panel.prompt = "Choose Image"
+        guard panel.runModal() == .OK, let url = panel.url else {
+            if selectedLocalFile == nil { selectedEntryID = nil }
+            return
+        }
+        do {
+            let file = try LocalFile(url: url)
+            guard file.canFlash else { throw LocalFileError.unreadable }
+            selectedLocalFile = file
+            error = nil
+        } catch {
+            self.error = error.localizedDescription
+            if selectedLocalFile == nil { selectedEntryID = nil }
         }
     }
 

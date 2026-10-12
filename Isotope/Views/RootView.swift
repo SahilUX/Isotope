@@ -47,8 +47,6 @@ struct RootView: View {
                     }
                 }
                 Section {
-                    Label("Local Files", systemImage: "doc")
-                        .tag(SidebarSelection.localFiles)
                     Label("Catalog", systemImage: "square.grid.2x2")
                         .tag(SidebarSelection.catalog)
                     Label("Activity", systemImage: "arrow.down.circle")
@@ -88,8 +86,6 @@ struct RootView: View {
             DrivesView()
         case .drive(let id):
             DriveDetailView(driveID: id)
-        case .localFiles:
-            LocalFilesView()
         case .catalog:
             CatalogView()
         case .activity:

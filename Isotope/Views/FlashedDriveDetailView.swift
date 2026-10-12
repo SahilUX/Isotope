@@ -277,9 +277,12 @@ struct FlashedDriveDetailView: View {
 private struct ChangeImageMenu: View {
     @Environment(AppStore.self) private var store
     let drive: ManagedDrive
+    @State private var choosingLocalFile = false
 
     var body: some View {
         Menu {
+            Button("Local file…", systemImage: "doc") { choosingLocalFile = true }
+            Divider()
             // PRD F32: `windowsManual` entries never appear here.
             // PRD F38: grouped by organization, as everywhere else.
             ForEach(store.flashableEntries.groupedByOrganization(), id: \.organization) { group in
@@ -303,6 +306,7 @@ private struct ChangeImageMenu: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .modifier(LocalFileActionModifier(drive: drive, choosingFile: $choosingLocalFile))
         .disabled(store.hasOperationsInFlight(drive))
     }
 

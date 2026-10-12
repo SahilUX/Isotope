@@ -741,9 +741,12 @@ private struct OperationBadge: View {
 private struct AddAssignmentMenu: View {
     @Environment(AppStore.self) private var store
     let drive: ManagedDrive
+    @State private var choosingLocalFile = false
 
     var body: some View {
         Menu {
+            Button("Local file…", systemImage: "doc") { choosingLocalFile = true }
+            Divider()
             if store.allEntries.isEmpty {
                 Text("The catalog is empty")
             } else {
@@ -761,6 +764,7 @@ private struct AddAssignmentMenu: View {
         }
         .menuStyle(.borderlessButton)
         .fixedSize()
+        .modifier(LocalFileActionModifier(drive: drive, choosingFile: $choosingLocalFile))
     }
 
     @ViewBuilder
