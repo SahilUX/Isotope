@@ -414,7 +414,6 @@ enum SidebarSelection: Hashable {
     case drives
     case drive(UUID)
     case catalog
-    case localFiles
     case activity
     case settings
 }
