@@ -356,6 +356,10 @@ extension AppStore {
         drive.lastSeenAt = Date()
         drive.flashFailure = nil
         updateDrive(drive)
+        // Isotope just wrote this image, so an earlier "contents changed"
+        // warning no longer applies; the re-attach check raises it again if
+        // the new label still does not match.
+        if case .contentsChanged = driveIssues[request.driveID] { setIssue(nil, for: request.driveID) }
     }
 
     /// DESIGN §9: a half-written stick stays flagged until a flash succeeds.

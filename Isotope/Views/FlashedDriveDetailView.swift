@@ -54,7 +54,8 @@ struct FlashedDriveDetailView: View {
             }
             // PRD F40: the stick's volume label stopped looking like the image
             // it is registered as holding — someone re-flashed it elsewhere.
-            if let issue = store.driveIssues[drive.id] {
+            // Hidden while a flash is replacing those contents anyway.
+            if let issue = store.visibleIssue(for: drive) {
                 Section { DriveIssueBanner(issue: issue) }
             }
             if store.flashEjectOffers.contains(drive.id) {

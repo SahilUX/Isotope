@@ -88,8 +88,18 @@ extension AppStore {
         }
     }
 
+    /// The issue worth showing for a drive right now. A "contents changed"
+    /// warning (PRD F40) is moot while Isotope is downloading or flashing the
+    /// image that will replace those contents, so it is held back until the
+    /// flash ends and the stick is re-checked.
+    func visibleIssue(for drive: ManagedDrive) -> DriveIssue? {
+        guard let issue = driveIssues[drive.id] else { return nil }
+        if case .contentsChanged = issue, hasOperationsInFlight(drive) { return nil }
+        return issue
+    }
+
     func status(of drive: ManagedDrive) -> DriveStatus {
-        if driveIssues[drive.id] != nil { return .needsAttention }
+        if visibleIssue(for: drive) != nil { return .needsAttention }
         // DESIGN §9: a half-written stick is an attention case, not an update.
         if drive.flashFailure != nil { return .needsAttention }
         guard isConnected(drive) else { return .disconnected }

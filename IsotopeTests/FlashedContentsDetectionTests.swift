@@ -153,6 +153,25 @@ final class FlashedContentsDetectionTests: XCTestCase {
         XCTAssertNil(store.driveIssues[drive.id])
     }
 
+    func testAContentsWarningIsHeldBackWhileAFlashIsInFlight() async throws {
+        let store = await makeStore()
+        let stick = device(labels: ["Ubuntu 24.04.4 LTS amd64"])
+        let drive = try store.registerFlashedDrive(device: stick, entryID: "ubuntu-desktop",
+                                                   channelID: "lts",
+                                                   detected: store.detectedContents(for: stick))
+        store.reconcileFlashedContents(driveID: drive.id, labels: ["DT50"])
+        XCTAssertNotNil(store.visibleIssue(for: drive))
+
+        // The flash about to replace those contents makes the warning moot.
+        store.drivesWithOperationsInFlight.insert(drive.id)
+        XCTAssertNil(store.visibleIssue(for: drive))
+        XCTAssertNotEqual(store.status(of: drive), .needsAttention)
+
+        // Once the flash ends, a label that still does not match shows it again.
+        store.drivesWithOperationsInFlight.remove(drive.id)
+        XCTAssertEqual(store.status(of: drive), .needsAttention)
+    }
+
     func testSilenceIsNotEvidence() async throws {
         let store = await makeStore()
         let stick = device(labels: ["Ubuntu 24.04.4 LTS amd64"])
