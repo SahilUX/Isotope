@@ -38,9 +38,21 @@ Anything not in the catalog can be added as a custom source. There are four dete
 
 *The catalog, grouped by organization. Every channel names the source it was resolved from and when it was last checked.*
 
+## Use your own files
+
+Open **Local Files** in the sidebar and select **Choose Files…**. Add one or several files from your Mac, including images outside the catalog.
+
+- Select **Open** to open a file with its default macOS app.
+- Select **Copy to USB…** and choose a registered, connected Ventoy drive. Confirm the copy into its configured folder. Existing files with the same name are left alone.
+- For an ISO or raw IMG image, select **Flash USB…**, choose a device, and confirm the erase. A device registered for copying must be unregistered before it can be flashed.
+
+Your original files stay in place, regardless of the download cleanup settings. Local flashes offer read-back verification and are recorded as kept as is. Raw flashing needs a bootable disk image; Windows installer ISOs require a different layout.
+
+The file list lasts until you quit Isotope. **Remove** clears a file from the list without deleting it. Watch transfers and their results in **Activity**.
+
 ## Keeping updates safe
 
-- Every ISO is SHA-256 verified against the publisher's checksum before it touches a drive. Sources without a published checksum are labelled unverified rather than silently trusted.
+- Catalog downloads with a published checksum are SHA-256 verified before they touch a drive. Sources without a published checksum are labelled unverified rather than silently trusted.
 - Copies land under a temporary name and are renamed on completion, so a half-written ISO never appears on your drive.
 - Only the specific old ISO being replaced is ever deleted. Nothing else on the drive is touched.
 - The free-space pre-flight counts the ISO being replaced, including one that shares the incoming file's name, and fails with the exact shortfall rather than running out mid-copy.
@@ -196,7 +208,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested. 253 unit tests in `IsotopeCore`, 227 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested. 253 unit tests in `IsotopeCore`, 236 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

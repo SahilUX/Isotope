@@ -46,7 +46,7 @@ struct FlashConfirmationSheet: View {
                     LabeledContent("Image", value: "\(plan.title) \(plan.toVersion)")
                     LabeledContent("File", value: plan.fileName)
                     if let size = plan.isoSizeBytes {
-                        LabeledContent("Download",
+                        LabeledContent(plan.localFile == nil ? "Download" : "Image size",
                                        value: ByteCountFormatter.string(fromByteCount: size, countStyle: .file))
                     }
                     if let from = plan.fromVersion {
@@ -59,7 +59,9 @@ struct FlashConfirmationSheet: View {
 
             // PRD F21: an unverifiable download is labelled at confirmation time.
             if !plan.isVerifiable {
-                Label("This source publishes no checksum, so the downloaded image cannot be verified before it is written.",
+                Label(plan.localFile == nil
+                      ? "This source publishes no checksum, so the downloaded image cannot be verified before it is written."
+                      : "This is your local image. Isotope has no published checksum for it. Raw flashing requires a bootable disk image; Windows installer ISOs need a different layout.",
                       systemImage: "questionmark.circle")
                     .font(.callout)
                     .foregroundStyle(.orange)
@@ -74,7 +76,9 @@ struct FlashConfirmationSheet: View {
             }
 
             Toggle("Verify the device after writing", isOn: $verify)
-            Text("macOS will ask for an administrator password once the download finishes — that is when the write begins.")
+            Text(plan.localFile == nil
+                 ? "macOS will ask for an administrator password once the download finishes — that is when the write begins."
+                 : "macOS will ask for an administrator password before writing your image.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)

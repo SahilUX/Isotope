@@ -65,6 +65,8 @@ struct UpdateRequest: Sendable, Identifiable {
     /// user took it — the old file is not deleted, and the store turns it into a
     /// pinned assignment afterwards.
     var keepReplacedAsPinned = false
+    /// A one-off copy preserves the source and refuses destination collisions.
+    var isLocalFile = false
 }
 
 /// Everything the engine needs off the main actor in one read, so drive state
@@ -264,6 +266,9 @@ actor UpdateEngine {
         guard let snapshot = await store.updateSnapshot(driveID: request.driveID,
                                                         assignmentID: request.assignmentID)
         else { throw UpdateError.driveNotConnected(request.driveName) }
+        if request.isLocalFile, await store.drive(id: request.driveID)?.isFlashed != false {
+            throw UpdateError.copyFailed("Choose a mounted USB drive for copying files.")
+        }
         guard snapshot.isConnected else { throw UpdateError.driveNotConnected(snapshot.driveName) }
 
         let resolved: ResolvedVolume
@@ -386,14 +391,17 @@ actor UpdateEngine {
                                fileName: String) async throws -> PlacedISO {
         let (snapshot, volume, scoped) = try await openDrive(request)
         defer { if scoped { drives.endAccess(volume) } }
-        guard let size = Self.fileSize(sourceFile), size > 0 else {
-            throw UpdateError.copyFailed("“\(fileName)” could not be read from your Downloads folder.")
+        let access = sourceFile.startAccessingSecurityScopedResource()
+        defer { if access { sourceFile.stopAccessingSecurityScopedResource() } }
+        guard let size = Self.fileSize(sourceFile), size >= 0,
+              (try? sourceFile.resourceValues(forKeys: [.isRegularFileKey]))?.isRegularFile == true else {
+            throw UpdateError.copyFailed("“\(fileName)” could not be read from the selected location.")
         }
         let local = LocalISO(url: sourceFile, fileName: fileName, sizeBytes: size, cacheKey: "")
         var placed = try await place(local, request: request, snapshot: snapshot,
                                      volume: volume, finalName: fileName)
         // PRD F64: it is on the drive now, so the download has done its job.
-        if await store.trashesManualSourceAfterPlacement,
+        if !request.isLocalFile, await store.trashesManualSourceAfterPlacement,
            Self.trashSource(sourceFile, volume: volume) {
             placed.trashedSourceName = sourceFile.lastPathComponent
         }
@@ -427,6 +435,19 @@ actor UpdateEngine {
             try manager.createDirectory(at: folder, withIntermediateDirectories: true)
         } catch {
             throw UpdateError.copyFailed(error.localizedDescription)
+        }
+
+        if request.isLocalFile {
+            guard finalName == URL(fileURLWithPath: finalName).lastPathComponent,
+                  !DownloadArtifact.isPartFileName(finalName) else {
+                throw UpdateError.copyFailed("Choose a file with a different name; this name is reserved for transfers.")
+            }
+            let destination = folder.appendingPathComponent(finalName)
+            let partial = folder.appendingPathComponent(DownloadArtifact.partFileName(for: finalName))
+            guard !manager.fileExists(atPath: destination.path),
+                  !manager.fileExists(atPath: partial.path) else {
+                throw UpdateError.copyFailed("A file named “\(finalName)” already exists on the drive. Rename it or choose another file.")
+            }
         }
 
         // The old ISO this update replaces — the only file we are ever allowed
@@ -544,7 +565,12 @@ actor UpdateEngine {
         await store.updateOperationPhase(id: request.id, phase: .finishing, totalBytes: local.sizeBytes)
         let finalURL = folder.appendingPathComponent(finalName)
         do {
-            if manager.fileExists(atPath: finalURL.path) { try manager.removeItem(at: finalURL) }
+            if manager.fileExists(atPath: finalURL.path) {
+                guard !request.isLocalFile else {
+                    throw UpdateError.copyFailed("A file with that name appeared on the drive during the copy. Nothing was replaced.")
+                }
+                try manager.removeItem(at: finalURL)
+            }
             try manager.moveItem(at: partURL, to: finalURL)
         } catch {
             try? manager.removeItem(at: partURL)

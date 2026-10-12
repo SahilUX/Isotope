@@ -78,6 +78,30 @@ final class AppStoreTests: XCTestCase {
         XCTAssertTrue(store.staleAssignments(on: drive).isEmpty)
     }
 
+    func testLocalFlashPickerExcludesRegisteredCopyVolumeWithoutHardwareID() {
+        let store = makeStore()
+        let drive = ManagedDrive(volumeUUID: "VENTOY-UUID", displayName: "Ventoy", bookmark: Data())
+        store.addDrive(drive)
+        store.attachedDevices = [FlashDevice(bsdName: "disk4", displayName: "USB", sizeBytes: 32 << 30,
+                                            isWholeDisk: true, isExternal: true,
+                                            isRemovableOrEjectable: true, isUSB: true, isBootDisk: false,
+                                            hardwareID: HardwareID(vendorID: 1, productID: 2, serialNumber: "USB"),
+                                            volumeNames: ["Ventoy"], volumeUUIDs: ["VENTOY-UUID"])]
+        XCTAssertTrue(store.localFlashDevices.isEmpty)
+        store.removeDrive(id: drive.id)
+        XCTAssertEqual(store.localFlashDevices.map(\.bsdName), ["disk4"])
+    }
+
+    func testLocalImportDeduplicatesFilesAndRejectsDirectories() throws {
+        let store = makeStore()
+        let url = try TestFiles.write(root.appendingPathComponent("disk.IMG"), size: 4096)
+        try store.importLocalFiles([url, url])
+        XCTAssertEqual(store.localFiles.count, 1)
+        XCTAssertTrue(store.localFiles[0].canFlash)
+        XCTAssertThrowsError(try store.importLocalFiles([root]))
+        XCTAssertEqual(store.localFiles.count, 1)
+    }
+
     func testCryptoKitHashingMatchesKnownVector() throws {
         // SHA-256 of "abc".
         let expected = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"

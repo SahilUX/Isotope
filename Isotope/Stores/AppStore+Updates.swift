@@ -209,7 +209,8 @@ extension AppStore {
 
     func title(for assignment: Assignment) -> String {
         let entry = entry(id: assignment.entryID)
-        let name = entry?.name ?? assignment.entryID
+        let name = entry?.name ?? (assignment.entryID == "local-file"
+            ? assignment.installed?.fileName ?? "Local image" : assignment.entryID)
         guard let channel = entry?.channel(id: assignment.channelID),
               (entry?.channels.count ?? 0) > 1 else { return name }
         return "\(name) — \(channel.name)"

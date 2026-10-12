@@ -103,6 +103,53 @@ final class UpdateEngineTests: XCTestCase {
         await fixture.engine.drain()
     }
 
+    private func copyLocal(_ source: URL, fixture: Fixture) async throws {
+        let file = try LocalFile(url: source)
+        let request = UpdateRequest(driveID: fixture.driveID, driveName: "VENTOY",
+                                    assignmentID: UUID(), entryID: "local-file", channelID: "local",
+                                    title: file.name, release: file.release, isLocalFile: true)
+        await fixture.engine.enqueueManual(request, sourceFile: source, fileName: file.name)
+        await fixture.engine.drain()
+    }
+
+    func testLocalCopyKeepsSourceAndTrackedImageWithoutDownloading() async throws {
+        let installed = InstalledISO(fileName: "existing.iso", version: .parse("1"), placedByApp: true)
+        let fixture = try await makeFixture(installed: installed)
+        let previous = fixture.store.settings.trashManualSourceAfterPlacement
+        defer { fixture.store.settings.trashManualSourceAfterPlacement = previous }
+        fixture.store.settings.trashManualSourceAfterPlacement = true
+        let source = try TestFiles.write(root.appendingPathComponent("notes.txt"), size: 4096)
+        let original = try Data(contentsOf: source)
+        try await copyLocal(source, fixture: fixture)
+        XCTAssertEqual(try Data(contentsOf: source), original)
+        XCTAssertEqual(try Data(contentsOf: volume.appendingPathComponent("notes.txt")), original)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: volume.appendingPathComponent("existing.iso").path))
+        XCTAssertEqual(fixture.store.drive(id: fixture.driveID)?.assignments.first?.installed, installed)
+        XCTAssertTrue(fixture.provider.requests.isEmpty)
+        XCTAssertEqual(fixture.store.operations.first?.phase, .completed)
+    }
+
+    func testLocalCopyRefusesExistingDestinationAndPreservesBothFiles() async throws {
+        let fixture = try await makeFixture()
+        let source = try TestFiles.write(root.appendingPathComponent("notes.txt"), size: 4096)
+        let destination = try TestFiles.write(volume.appendingPathComponent("notes.txt"), size: 32)
+        let original = try Data(contentsOf: destination)
+        try await copyLocal(source, fixture: fixture)
+        XCTAssertEqual(try Data(contentsOf: destination), original)
+        XCTAssertEqual(TestFiles.size(source), 4096)
+        XCTAssertTrue(fixture.store.operations.first?.errorMessage?.contains("already exists") == true)
+    }
+
+    func testLocalCopySupportsEmptyFiles() async throws {
+        let fixture = try await makeFixture()
+        let source = root.appendingPathComponent("empty.txt")
+        try Data().write(to: source)
+        try await copyLocal(source, fixture: fixture)
+        XCTAssertEqual(TestFiles.size(volume.appendingPathComponent("empty.txt")), 0)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+        XCTAssertEqual(fixture.store.operations.first?.phase, .completed)
+    }
+
     // MARK: - Replacing a file that shares the new name (PRD F61)
 
     func testAnISOCanReplaceAFileOfTheSameNameOnAFullDrive() async throws {
