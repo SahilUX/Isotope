@@ -81,6 +81,13 @@ func checkMirrors(entry: CatalogEntry, channel: Channel, isoURL: URL) async -> M
     let origin = await head(isoURL)
     var check = MirrorCheck()
     check.checked = alternates.count
+    // An origin that does not serve the file itself is the catalog's problem,
+    // not the mirrors'; its error page's length is no reference.
+    if origin.status != 200 {
+        check.warnings.append("origin answered \(origin.status.map { "HTTP \($0)" } ?? origin.error ?? "nothing"); mirrors not checked")
+        check.mismatched = alternates.count
+        return check
+    }
     if origin.contentLength == nil {
         check.warnings.append("origin sent no Content-Length; mirror sizes not compared")
     }
