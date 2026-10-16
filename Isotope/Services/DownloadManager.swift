@@ -128,6 +128,9 @@ actor DownloadManager: ISOProviding {
     /// offered again this session: re-probing would pick the same fast,
     /// wrong server every time the user pressed retry.
     private var distrustedMirrors: Set<URL> = []
+    /// The URL each transfer started from, so a pause-and-resume in the same
+    /// run still knows where its bytes came from (resume data does not say).
+    private var sourcesInUse: [String: URL] = [:]
 
     /// PRD F19: max 2 concurrent downloads, configurable.
     private var maxConcurrent: Int
@@ -354,6 +357,7 @@ actor DownloadManager: ISOProviding {
             inFlight[key] = nil
             observers[key] = nil
             activeTasks[key] = nil
+            sourcesInUse[key] = nil
         }
         // The concurrency slot is held by `download` around each transfer only:
         // a paused download must not keep a slot (PRD F19 — two paused
@@ -416,7 +420,8 @@ actor DownloadManager: ISOProviding {
     /// PRD F73: a fresh start first times the mirrors (inside the slot, so
     /// probing never competes with a running download for the line) and then
     /// works down the ranking. Returns the file and the URL it came from — nil
-    /// when URLSession resumed it from resume data, which carries its own URL.
+    /// when that is unknown, as for a transfer resumed after a relaunch (its
+    /// resume data carries its own URL, and nothing here reads it).
     private func download(_ request: ISORequest) async throws -> (file: URL, source: URL?) {
         let key = request.cacheKey
         var resumeData = loadResumeData(key: key)
@@ -492,13 +497,16 @@ actor DownloadManager: ISOProviding {
     /// one reported — a dead mirror degrades to the original, never to an error.
     private func transferFromBestSource(_ request: ISORequest, resumeData: Data?,
                                         sources: [URL]) async throws -> (file: URL, source: URL?) {
-        if let resumeData {
-            return (try await transfer(request, resumeData: resumeData, from: request.sourceURL,
-                                       canFailOver: false), nil)
-        }
         let key = request.cacheKey
+        if let resumeData {
+            // Unknown after a relaunch, which is fine: nil only means the
+            // history line does not name a server.
+            return (try await transfer(request, resumeData: resumeData, from: request.sourceURL,
+                                       canFailOver: false), sourcesInUse[key])
+        }
         let sources = sources.isEmpty ? [request.sourceURL] : sources
         for (index, url) in sources.enumerated() {
+            sourcesInUse[key] = url
             do {
                 let file = try await transfer(request, resumeData: nil, from: url,
                                               canFailOver: index < sources.count - 1)
