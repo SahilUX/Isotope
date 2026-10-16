@@ -28,14 +28,20 @@ struct ISORequest: Sendable, Hashable {
     var expectedSizeBytes: Int64?
     /// Only used to describe the download if it has to be resumed after a quit.
     var context: DownloadContext?
+    /// PRD F73: the same file on other servers, from the catalog's mirror
+    /// rules. Never part of `cacheKey`: which server delivered the bytes does
+    /// not change what they are, and the checksum is what proves that.
+    var alternateURLs: [URL]
 
     init(sourceURL: URL, fileName: String, sha256: String? = nil,
-         expectedSizeBytes: Int64? = nil, context: DownloadContext? = nil) {
+         expectedSizeBytes: Int64? = nil, context: DownloadContext? = nil,
+         alternateURLs: [URL] = []) {
         self.sourceURL = sourceURL
         self.fileName = fileName
         self.sha256 = sha256
         self.expectedSizeBytes = expectedSizeBytes
         self.context = context
+        self.alternateURLs = alternateURLs
     }
 
     var cacheKey: String {
@@ -61,9 +67,14 @@ struct LocalISO: Sendable, Hashable {
     var fileName: String
     var sizeBytes: Int64
     var cacheKey: String
+    /// PRD F73: the server it was downloaded from, when that was a mirror
+    /// rather than the catalog's own URL. Nil for cache hits and the original.
+    var mirrorHost: String? = nil
 }
 
 enum DownloadStage: String, Sendable, Hashable {
+    /// PRD F73: timing mirrors before a fresh download starts.
+    case probing
     case cached, downloading, verifying, extracting
 }
 
@@ -108,6 +119,15 @@ actor DownloadManager: ISOProviding {
     private let locations: CacheLocations
     private let session: URLSession
     private let sessionDelegate: DownloadSessionDelegate
+    private let prober: MirrorProbing
+    /// PRD F73: the Settings toggle. Read when a download starts.
+    private var probesMirrors: Bool
+    /// Running mirror probes, so cancel and pause can stop one mid-flight.
+    private var probeTasks: [String: Task<[MirrorProbeResult], Never>] = [:]
+    /// Alternates that delivered a file which then failed its checksum. Not
+    /// offered again this session: re-probing would pick the same fast,
+    /// wrong server every time the user pressed retry.
+    private var distrustedMirrors: Set<URL> = []
 
     /// PRD F19: max 2 concurrent downloads, configurable.
     private var maxConcurrent: Int
@@ -139,12 +159,16 @@ actor DownloadManager: ISOProviding {
          hashing: Hashing,
          extractor: ArchiveExtracting = DittoArchiveExtractor(),
          maxConcurrent: Int = 2,
-         sessionConfiguration: URLSessionConfiguration = .default) {
+         sessionConfiguration: URLSessionConfiguration = .default,
+         prober: MirrorProbing = URLSessionMirrorProber(),
+         probesMirrors: Bool = true) {
         self.cache = cache
         self.locations = locations
         self.hashing = hashing
         self.extractor = extractor
         self.maxConcurrent = max(1, maxConcurrent)
+        self.prober = prober
+        self.probesMirrors = probesMirrors
         try? locations.ensureDirectoriesExist()
         let delegate = DownloadSessionDelegate(staging: locations.resume)
         self.sessionDelegate = delegate
@@ -163,6 +187,11 @@ actor DownloadManager: ISOProviding {
             slotWaiters.removeFirst().continuation.resume(returning: true)
             runningCount += 1
         }
+    }
+
+    /// PRD F73: off means every download comes from the catalog's own URL.
+    func setProbesMirrors(_ value: Bool) {
+        probesMirrors = value
     }
 
     // MARK: - Resume offers (PRD F19)
@@ -267,6 +296,13 @@ actor DownloadManager: ISOProviding {
     // MARK: - Pause / resume / cancel
 
     func pause(cacheKey: String) {
+        // Still timing mirrors: nothing has been downloaded, so there is no
+        // resume data to keep — stop probing and park before the transfer.
+        if let probe = probeTasks[cacheKey] {
+            pausedKeys.insert(cacheKey)
+            probe.cancel()
+            return
+        }
         guard let task = activeTasks[cacheKey] else { return }
         pausedKeys.insert(cacheKey)
         pauseRequested.insert(cacheKey)
@@ -287,6 +323,7 @@ actor DownloadManager: ISOProviding {
         pausedKeys.remove(cacheKey)
         pauseRequested.remove(cacheKey)
         activeTasks[cacheKey]?.cancel()
+        probeTasks[cacheKey]?.cancel()
         verifyFlags[cacheKey]?.set()
         for waiter in pauseWaiters.removeValue(forKey: cacheKey) ?? [] { waiter.resume() }
         // Still queued for a download slot: leave the queue without taking one.
@@ -321,23 +358,32 @@ actor DownloadManager: ISOProviding {
         // The concurrency slot is held by `download` around each transfer only:
         // a paused download must not keep a slot (PRD F19 — two paused
         // downloads would otherwise wedge the queue at max-2).
-        let downloaded = try await download(request)
+        let (downloaded, source) = try await download(request)
         do {
             try await verify(downloaded, request: request)
         } catch {
             // PRD F25: a corrupt download is discarded, never cached.
             try? FileManager.default.removeItem(at: downloaded)
+            if case DownloadError.checksumMismatch = error, let source, source != request.sourceURL {
+                distrustedMirrors.insert(source)
+            }
             throw error
         }
         discardResumable(key: key)
 
+        // Cached under the catalog's URL whichever server sent it, so a later
+        // cache lookup — which only knows that URL — still finds it.
         let artifact = try await cache.adopt(fileAt: downloaded, key: key, fileName: request.fileName,
                                              sha256: request.sha256, sourceURL: request.sourceURL)
+        let mirrorHost = source.flatMap { $0 == request.sourceURL ? nil : $0.host }
         guard DownloadArtifact.isZipArchive(request.fileName) else {
             return LocalISO(url: await cache.fileURL(artifact), fileName: request.isoFileName,
-                            sizeBytes: artifact.sizeBytes, cacheKey: artifact.key)
+                            sizeBytes: artifact.sizeBytes, cacheKey: artifact.key,
+                            mirrorHost: mirrorHost)
         }
-        return try await unpack(artifact, request: request)
+        var unpacked = try await unpack(artifact, request: request)
+        unpacked.mirrorHost = mirrorHost
+        return unpacked
     }
 
     /// Memtest86+ is only published as a zip; unpack once and cache the ISO so a
@@ -366,9 +412,15 @@ actor DownloadManager: ISOProviding {
     /// The concurrency slot is taken around the transfer itself and given back
     /// while the download is parked, so paused downloads never starve queued
     /// ones (PRD F19).
-    private func download(_ request: ISORequest) async throws -> URL {
+    ///
+    /// PRD F73: a fresh start first times the mirrors (inside the slot, so
+    /// probing never competes with a running download for the line) and then
+    /// works down the ranking. Returns the file and the URL it came from — nil
+    /// when URLSession resumed it from resume data, which carries its own URL.
+    private func download(_ request: ISORequest) async throws -> (file: URL, source: URL?) {
         let key = request.cacheKey
         var resumeData = loadResumeData(key: key)
+        var sources: [URL]?
         while true {
             if cancelledKeys.contains(key) { throw DownloadError.cancelled }
             try await acquireSlot(key: key)
@@ -377,10 +429,27 @@ actor DownloadManager: ISOProviding {
                 releaseSlot()
                 throw DownloadError.cancelled
             }
+            if resumeData == nil, sources == nil {
+                let ranked = await rankedSources(for: request)
+                if cancelledKeys.contains(key) {
+                    releaseSlot()
+                    throw DownloadError.cancelled
+                }
+                // Paused while probing: give the slot back and park. Probing
+                // runs again on resume — the fastest mirror may have changed.
+                if pausedKeys.contains(key) {
+                    releaseSlot()
+                    await parkUntilResumed(key: key)
+                    if cancelledKeys.contains(key) { throw DownloadError.cancelled }
+                    continue
+                }
+                sources = ranked
+            }
             do {
-                let file = try await transfer(request, resumeData: resumeData)
+                let result = try await transferFromBestSource(request, resumeData: resumeData,
+                                                              sources: sources ?? [request.sourceURL])
                 releaseSlot()
-                return file
+                return result
             } catch let error as DownloadPause {
                 releaseSlot()
                 resumeData = error.resumeData ?? loadResumeData(key: key)
@@ -393,7 +462,56 @@ actor DownloadManager: ISOProviding {
         }
     }
 
-    private func transfer(_ request: ISORequest, resumeData: Data?) async throws -> URL {
+    // MARK: - Mirrors (PRD F73)
+
+    /// The URLs to try, best first; always contains the catalog's own URL.
+    /// Probing is skipped — and costs nothing — when there is nothing to
+    /// choose between or the user switched it off.
+    private func rankedSources(for request: ISORequest) async -> [URL] {
+        let key = request.cacheKey
+        var seen: Set<URL> = [request.sourceURL]
+        let alternates = request.alternateURLs.filter {
+            !distrustedMirrors.contains($0) && seen.insert($0).inserted
+        }
+        guard probesMirrors, !alternates.isEmpty else { return [request.sourceURL] }
+        emit(key, .probing, TransferProgress(completedBytes: 0))
+        let prober = self.prober
+        let candidates = [request.sourceURL] + alternates
+        let probe = Task { await prober.probe(candidates) }
+        probeTasks[key] = probe
+        let results = await probe.value
+        probeTasks[key] = nil
+        return MirrorRanking.rank(primary: request.sourceURL, results: results,
+                                  expectedSize: request.expectedSizeBytes)
+    }
+
+    /// Downloads from the first source that delivers. Moving on is only for a
+    /// server that refused (an HTTP error) or failed before sending a byte; once
+    /// data has flowed the failure is the transfer's, and the usual resume
+    /// handling applies. The last source never moves on, so its failure is the
+    /// one reported — a dead mirror degrades to the original, never to an error.
+    private func transferFromBestSource(_ request: ISORequest, resumeData: Data?,
+                                        sources: [URL]) async throws -> (file: URL, source: URL?) {
+        if let resumeData {
+            return (try await transfer(request, resumeData: resumeData, from: request.sourceURL,
+                                       canFailOver: false), nil)
+        }
+        let key = request.cacheKey
+        let sources = sources.isEmpty ? [request.sourceURL] : sources
+        for (index, url) in sources.enumerated() {
+            do {
+                let file = try await transfer(request, resumeData: nil, from: url,
+                                              canFailOver: index < sources.count - 1)
+                return (file, url)
+            } catch is FailOver {
+                if cancelledKeys.contains(key) { throw DownloadError.cancelled }
+            }
+        }
+        throw DownloadError.transport("No download source was available.")
+    }
+
+    private func transfer(_ request: ISORequest, resumeData: Data?, from url: URL,
+                          canFailOver: Bool) async throws -> URL {
         let key = request.cacheKey
         let expected = request.expectedSizeBytes
         let progressBox = ProgressBox()
@@ -401,7 +519,7 @@ actor DownloadManager: ISOProviding {
 
         return try await withCheckedThrowingContinuation { continuation in
             let task: URLSessionDownloadTask = resumeData.map { session.downloadTask(withResumeData: $0) }
-                ?? session.downloadTask(with: request.sourceURL)
+                ?? session.downloadTask(with: url)
             sessionDelegate.register(task, handlers: DownloadSessionDelegate.Handlers(
                 progress: { [weak self] written, total in
                     let snapshot = progressBox.record(written: written, total: total > 0 ? total : expected)
@@ -418,6 +536,7 @@ actor DownloadManager: ISOProviding {
                     Task { await self?.finishTransfer(key: key, result: result,
                                                       request: request,
                                                       bytes: progressBox.written,
+                                                      canFailOver: canFailOver,
                                                       continuation: continuation) }
                 }))
             activeTasks[key] = task
@@ -441,7 +560,7 @@ actor DownloadManager: ISOProviding {
     private var rateEstimators: [String: TransferRateEstimator] = [:]
 
     private func finishTransfer(key: String, result: Result<URL, Error>, request: ISORequest,
-                                bytes: Int64,
+                                bytes: Int64, canFailOver: Bool,
                                 continuation: CheckedContinuation<URL, Error>) {
         activeTasks[key] = nil
         activeRequests[key] = nil
@@ -468,7 +587,20 @@ actor DownloadManager: ISOProviding {
             // The server answered with an error page: nothing to resume.
             if let downloadError = error as? DownloadError {
                 discardResumable(key: key)
+                // PRD F73: a refusing server is skipped while another is
+                // waiting. Its error page is not part of the ISO, however
+                // many bytes of it arrived.
+                if canFailOver, case .httpStatus = downloadError {
+                    continuation.resume(throwing: FailOver())
+                    return
+                }
                 continuation.resume(throwing: downloadError)
+                return
+            }
+            // PRD F73: nothing arrived, so there is nothing to resume and no
+            // reason not to try the next source.
+            if canFailOver, bytes == 0 {
+                continuation.resume(throwing: FailOver())
                 return
             }
             // A real failure keeps its resume data so relaunch can offer it (F19).
@@ -600,6 +732,10 @@ actor DownloadManager: ISOProviding {
 private struct DownloadPause: Error {
     var resumeData: Data?
 }
+
+/// Thrown internally when a source failed before delivering anything and
+/// another is waiting to be tried (PRD F73).
+private struct FailOver: Error {}
 
 /// Progress counters shared with the `URLSession` delegate queue.
 private final class ProgressBox: @unchecked Sendable {

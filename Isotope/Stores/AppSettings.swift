@@ -35,6 +35,20 @@ final class AppSettings {
         static let discardAfterPlacement = "discardCachedISOAfterPlacement"
         static let windowsAutoDownload = "attemptWindowsAutoDownload"
         static let trashManualSource = "trashManualSourceAfterPlacement"
+        static let probeMirrors = "probeMirrors"
+    }
+
+    /// PRD F73: before a fresh download of an entry that lists mirrors, time a
+    /// 1 MiB range request against each and download from the fastest. **On by
+    /// default** — one origin can be a tenth of the line's speed for a user on
+    /// the wrong continent. Off, every download comes from the catalog's own
+    /// URL and no mirror is contacted. Either way the checksum is verified.
+    var probeMirrors: Bool {
+        get {
+            access(keyPath: \.probeMirrors)
+            return defaults.object(forKey: Key.probeMirrors) as? Bool ?? true
+        }
+        set { withMutation(keyPath: \.probeMirrors) { defaults.set(newValue, forKey: Key.probeMirrors) } }
     }
 
     /// PRD F64: after a hand-downloaded ISO (Windows) is placed on a drive,

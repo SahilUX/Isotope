@@ -122,7 +122,8 @@ final class AppStore {
         guard updateEngine == nil else { return }
         let cache = ISOCache(locations: cacheLocations, capacityBytes: settings.cacheCapacityBytes)
         let downloads = DownloadManager(cache: cache, locations: cacheLocations, hashing: hashing,
-                                        maxConcurrent: settings.maxConcurrentDownloads)
+                                        maxConcurrent: settings.maxConcurrentDownloads,
+                                        probesMirrors: settings.probeMirrors)
         isoCache = cache
         downloadManager = downloads
         updateEngine = UpdateEngine(store: self, downloads: downloads)

@@ -311,11 +311,13 @@ extension AppStore {
             }
             applyFlashResult(flashed, request: request)
             let verified = flashed.verified ? " (verified)" : ""
+            // PRD F73: name the mirror when one was used.
+            let mirror = flashed.mirrorHost.map { " · downloaded from \($0)" } ?? ""
             event = HistoryEvent(driveID: request.driveID, driveName: request.driveName,
                                  entryID: request.entryID, channelID: request.channelID,
                                  fileName: flashed.fileName, version: flashed.version,
                                  outcome: .succeeded,
-                                 message: "Flashed \(request.title) \(flashed.version.raw) to “\(request.deviceName)”\(verified)")
+                                 message: "Flashed \(request.title) \(flashed.version.raw) to “\(request.deviceName)”\(verified)\(mirror)")
             // PRD F23: offer the eject now that nothing is in flight.
             flashEjectOffers.insert(request.driveID)
         case .failure(let error):
