@@ -1,8 +1,9 @@
 import IsotopeCore
 import SwiftUI
 
-/// PRD F12/F16/F19/F20/F24: check interval, notifications, download
-/// concurrency and resume policy, the ISO cache, and the history log.
+/// PRD F12/F16/F19/F20/F24/F73: check interval, notifications, download
+/// concurrency, resume policy and mirror choice, the ISO cache, and the
+/// history log.
 struct SettingsView: View {
     @Environment(AppStore.self) private var store
     @State private var cacheBytes: Int64?
@@ -38,6 +39,11 @@ struct SettingsView: View {
                     Text("Offer to resume in Activity").tag(false)
                     Text("Resume automatically on launch").tag(true)
                 }
+                // PRD F73: on by default; says what it contacts.
+                Toggle("Download from the fastest mirror", isOn: probeMirrorsBinding)
+                Text("For distributions with official mirrors, Isotope briefly tests each one with a 1 MiB request before downloading and uses the fastest. The checksum is verified the same way whichever server sends the file. Off, every download comes from the distribution's own server.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
                 Picker("Cache limit", selection: cacheCapacityBinding) {
                     Text("5 GB").tag(Int64(5) << 30)
                     Text("10 GB").tag(Int64(10) << 30)
@@ -144,6 +150,15 @@ struct SettingsView: View {
     private var autoResumeBinding: Binding<Bool> {
         Binding(get: { store.settings.autoResumeDownloads },
                 set: { store.settings.autoResumeDownloads = $0 })
+    }
+
+    private var probeMirrorsBinding: Binding<Bool> {
+        Binding(get: { store.settings.probeMirrors }, set: { value in
+            store.settings.probeMirrors = value
+            if let downloads = store.downloadManager {
+                Task { await downloads.setProbesMirrors(value) }
+            }
+        })
     }
 
     private var concurrencyBinding: Binding<Int> {

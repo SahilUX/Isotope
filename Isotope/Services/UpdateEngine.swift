@@ -95,6 +95,9 @@ struct PlacedISO: Sendable {
     var reclaimedCacheBytes: Int64 = 0
     /// PRD F64: the hand-downloaded file moved to the Trash after placing it.
     var trashedSourceName: String?
+    /// PRD F73: the mirror the ISO was downloaded from, when it was not the
+    /// catalog's own server.
+    var mirrorHost: String?
 }
 
 // MARK: - Engine
@@ -306,7 +309,10 @@ actor UpdateEngine {
             expectedSizeBytes: request.release.sizeBytes,
             context: DownloadContext(driveID: snapshot.driveID, driveName: snapshot.driveName,
                                      entryID: request.entryID, channelID: request.channelID,
-                                     assignmentID: request.assignmentID))
+                                     assignmentID: request.assignmentID),
+            alternateURLs: await store.mirrorAlternates(entryID: request.entryID,
+                                                        channelID: request.channelID,
+                                                        for: sourceURL))
         cacheKeys[request.id] = isoRequest.cacheKey
         await store.setOperationCacheKey(id: request.id, key: isoRequest.cacheKey)
         // A cancel that landed before the cache key was known had no download
@@ -334,6 +340,7 @@ actor UpdateEngine {
             let freed = await downloads.endUse(cacheKey: local.cacheKey, discard: discard)
             var result = placed
             result.reclaimedCacheBytes = freed
+            result.mirrorHost = local.mirrorHost
             return result
         } catch {
             // A failed copy leaves the download cached: retrying should not mean

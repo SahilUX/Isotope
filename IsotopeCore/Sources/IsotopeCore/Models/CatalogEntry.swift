@@ -35,10 +35,24 @@ public struct CatalogEntry: Codable, Identifiable, Hashable, Sendable {
     /// property of the image family rather than of the variant; a `Channel` may
     /// override it where the channels genuinely differ.
     public var contentProbes: [ContentProbe]
+    /// PRD F73: other servers carrying the same files, as prefix rewrites of
+    /// the resolved ISO URL. Empty for most entries — the ones whose origin
+    /// already redirects to a nearby mirror or sits behind a CDN gain nothing.
+    ///
+    /// Entry level, like `volumeLabelPattern`, because a mirror carries a
+    /// distribution's whole tree rather than one variant; a `Channel` may
+    /// override it.
+    public var mirrors: [MirrorRule]
+
+    private enum CodingKeys: String, CodingKey {
+        case id, name, kind, organization, homepage, channels, isBuiltIn,
+             volumeLabelPattern, contentProbes, mirrors
+    }
 
     public init(id: String, name: String, kind: Kind, organization: String? = nil,
                 homepage: URL? = nil, channels: [Channel], isBuiltIn: Bool,
-                volumeLabelPattern: String? = nil, contentProbes: [ContentProbe] = []) {
+                volumeLabelPattern: String? = nil, contentProbes: [ContentProbe] = [],
+                mirrors: [MirrorRule] = []) {
         self.id = id
         self.name = name
         self.kind = kind
@@ -48,6 +62,7 @@ public struct CatalogEntry: Codable, Identifiable, Hashable, Sendable {
         self.isBuiltIn = isBuiltIn
         self.volumeLabelPattern = volumeLabelPattern
         self.contentProbes = contentProbes
+        self.mirrors = mirrors
     }
 
     /// Hand-written for the same reason `ManagedDrive`'s is: a synthesised
@@ -64,8 +79,26 @@ public struct CatalogEntry: Codable, Identifiable, Hashable, Sendable {
         isBuiltIn = try c.decodeIfPresent(Bool.self, forKey: .isBuiltIn) ?? false
         volumeLabelPattern = try c.decodeIfPresent(String.self, forKey: .volumeLabelPattern)
         contentProbes = try c.decodeIfPresent([ContentProbe].self, forKey: .contentProbes) ?? []
+        mirrors = try c.decodeIfPresent([MirrorRule].self, forKey: .mirrors) ?? []
         organization = try c.decodeIfPresent(String.self, forKey: .organization)
             ?? Self.defaultOrganization(kind: kind, name: name)
+    }
+
+    /// Writes what the synthesised encoder wrote before PRD F73, plus
+    /// `mirrors` only when there are any, so a `custom-sources.json` written
+    /// now reads exactly like one written before the field existed.
+    public func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(name, forKey: .name)
+        try c.encode(kind, forKey: .kind)
+        try c.encode(organization, forKey: .organization)
+        try c.encodeIfPresent(homepage, forKey: .homepage)
+        try c.encode(channels, forKey: .channels)
+        try c.encode(isBuiltIn, forKey: .isBuiltIn)
+        try c.encodeIfPresent(volumeLabelPattern, forKey: .volumeLabelPattern)
+        try c.encode(contentProbes, forKey: .contentProbes)
+        if !mirrors.isEmpty { try c.encode(mirrors, forKey: .mirrors) }
     }
 
     /// What an entry without an explicit organization is filed under. User
@@ -96,6 +129,21 @@ public struct CatalogEntry: Codable, Identifiable, Hashable, Sendable {
         else { return contentProbes }
         return overrides
     }
+
+    /// PRD F73: the mirror rules that apply to `channelID`. A channel's own
+    /// list replaces the entry's, as with `contentProbes`; an empty list is
+    /// how a channel opts out of mirrors its entry declares.
+    public func mirrorRules(forChannel channelID: String?) -> [MirrorRule] {
+        guard let channelID, let channel = channel(id: channelID),
+              let overrides = channel.mirrors else { return mirrors }
+        return overrides
+    }
+
+    /// PRD F73: every URL the ISO at `url` can be fetched from, the original
+    /// first. Just `[url]` when no rule matches.
+    public func downloadCandidates(for url: URL, channelID: String?) -> [URL] {
+        MirrorCandidates.candidates(for: url, rules: mirrorRules(forChannel: channelID))
+    }
 }
 
 /// A variant within an entry (Ubuntu LTS vs Latest, Debian netinst vs DVD).
@@ -109,14 +157,19 @@ public struct Channel: Codable, Identifiable, Hashable, Sendable {
     /// PRD F44, optional override of `CatalogEntry.contentProbes`. Nil (the
     /// common case) means "use the entry's".
     public var contentProbes: [ContentProbe]?
+    /// PRD F73, optional override of `CatalogEntry.mirrors`. Nil (the common
+    /// case) means "use the entry's"; an empty list means "none for this one".
+    public var mirrors: [MirrorRule]?
 
     public init(id: String, name: String, provider: ProviderConfig,
-                volumeLabelPattern: String? = nil, contentProbes: [ContentProbe]? = nil) {
+                volumeLabelPattern: String? = nil, contentProbes: [ContentProbe]? = nil,
+                mirrors: [MirrorRule]? = nil) {
         self.id = id
         self.name = name
         self.provider = provider
         self.volumeLabelPattern = volumeLabelPattern
         self.contentProbes = contentProbes
+        self.mirrors = mirrors
     }
 }
 

@@ -101,6 +101,9 @@ struct FlashedImage: Sendable, Equatable {
     var volumeUUID: String?
     var volumeName: String?
     var verified: Bool
+    /// PRD F73: the mirror the image was downloaded from, when it was not the
+    /// catalog's own server.
+    var mirrorHost: String? = nil
 }
 
 enum FlashOutcome: Sendable {
@@ -244,7 +247,10 @@ actor FlashEngine {
                 expectedSizeBytes: request.release.sizeBytes,
                 context: DownloadContext(driveID: request.driveID, driveName: request.driveName,
                                          entryID: request.entryID, channelID: request.channelID,
-                                         assignmentID: request.assignmentID))
+                                         assignmentID: request.assignmentID),
+                alternateURLs: await store.mirrorAlternates(entryID: request.entryID,
+                                                            channelID: request.channelID,
+                                                            for: sourceURL))
             cacheKeys[request.id] = isoRequest.cacheKey
             await store.setOperationCacheKey(id: request.id, key: isoRequest.cacheKey)
             if flag.isSet { throw FlashError.cancelled }
@@ -305,7 +311,8 @@ actor FlashEngine {
         flashed = true
         return FlashedImage(fileName: finalName, version: request.release.version,
                             sizeBytes: local.sizeBytes, volumeUUID: remounted.volumeUUID,
-                            volumeName: remounted.volumeName, verified: verified)
+                            volumeName: remounted.volumeName, verified: verified,
+                            mirrorHost: local.mirrorHost)
     }
 
     /// PRD F29/F31: the gates run against the device's *current* state, every

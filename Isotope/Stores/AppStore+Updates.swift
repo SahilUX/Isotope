@@ -9,6 +9,8 @@ import IsotopeCore
 struct UpdateOperationState: Identifiable, Hashable, Sendable {
     enum Phase: Hashable, Sendable {
         case queued
+        /// PRD F73: timing mirrors before the download starts.
+        case findingMirror
         case downloading
         case verifying
         case extracting
@@ -32,6 +34,7 @@ struct UpdateOperationState: Identifiable, Hashable, Sendable {
         var label: String {
             switch self {
             case .queued: return "Queued"
+            case .findingMirror: return "Finding the fastest mirror"
             case .downloading: return "Downloading"
             case .verifying: return "Verifying"
             case .extracting: return "Unpacking"
@@ -73,14 +76,15 @@ struct UpdateOperationState: Identifiable, Hashable, Sendable {
 
     var fractionCompleted: Double? {
         if phase == .completed { return 1 }
-        guard let totalBytes, totalBytes > 0 else { return nil }
+        // Probing moves no bytes of the ISO; an empty bar would say it stalled.
+        guard phase != .findingMirror, let totalBytes, totalBytes > 0 else { return nil }
         return min(1, max(0, Double(completedBytes) / Double(totalBytes)))
     }
 
     var isActive: Bool { !phase.isTerminal }
 
     /// Only a download can be paused; a copy is short and local.
-    var canPause: Bool { phase == .downloading && cacheKey != nil }
+    var canPause: Bool { (phase == .downloading || phase == .findingMirror) && cacheKey != nil }
 
     var errorMessage: String? {
         if case .failed(let message) = phase { return message }
@@ -257,6 +261,14 @@ extension AppStore {
         return pattern
     }
 
+    /// PRD F73: other servers carrying the file at `url`, from the entry's
+    /// mirror rules. Empty for most entries and for every custom source, which
+    /// is what keeps probing from running where it has nothing to compare.
+    func mirrorAlternates(entryID: String, channelID: String, for url: URL) -> [URL] {
+        guard let entry = entry(id: entryID) else { return [] }
+        return Array(entry.downloadCandidates(for: url, channelID: channelID).dropFirst())
+    }
+
     /// What identifies every *other* entry's media, so the Downloads watch does
     /// not offer one image's ISO as a fallback for another: each channel's
     /// recognition pattern (`Win10_22H2_English_x64.iso`) and each entry's name
@@ -428,6 +440,7 @@ extension AppStore {
         mutateOperation(id: id) { operation in
             if let stage {
                 switch stage {
+                case .probing: operation.phase = .findingMirror
                 case .cached, .downloading: operation.phase = .downloading
                 case .verifying: operation.phase = .verifying
                 case .extracting: operation.phase = .extracting
@@ -478,11 +491,14 @@ extension AppStore {
             // PRD F64: moving someone's own download is worth saying out loud,
             // including where it went.
             let trashed = placed.trashedSourceName.map { " · moved “\($0)” to the Trash" } ?? ""
+            // PRD F73: name the mirror when one was used, so a bad one can be
+            // traced to the server that sent it.
+            let mirror = placed.mirrorHost.map { " · downloaded from \($0)" } ?? ""
             event = HistoryEvent(driveID: request.driveID, driveName: request.driveName,
                                  entryID: request.entryID, channelID: request.channelID,
                                  fileName: placed.fileName, version: placed.version,
                                  outcome: .succeeded,
-                                 message: "\(request.title) \(placed.version.raw)\(replaced)\(reclaimed)\(trashed)")
+                                 message: "\(request.title) \(placed.version.raw)\(replaced)\(mirror)\(reclaimed)\(trashed)")
         case .failure(let error):
             let cancelled = error == .cancelled
             mutateOperation(id: request.id) { operation in
