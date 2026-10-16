@@ -13,6 +13,18 @@
         "pattern": "^Ubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://releases.ubuntu.com/",
+        "to": [
+          "https://mirrors.edge.kernel.org/ubuntu-releases/",
+          "https://ftp.halifax.rwth-aachen.de/ubuntu-releases/",
+          "https://mirrors.mit.edu/ubuntu-releases/",
+          "https://mirror.aarnet.edu.au/pub/ubuntu/releases/",
+          "https://ftp.jaist.ac.jp/pub/Linux/ubuntu-releases/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -56,6 +68,18 @@
       {
         "path": ".disk/info",
         "pattern": "^Ubuntu-Server (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "mirrors": [
+      {
+        "from": "https://releases.ubuntu.com/",
+        "to": [
+          "https://mirrors.edge.kernel.org/ubuntu-releases/",
+          "https://ftp.halifax.rwth-aachen.de/ubuntu-releases/",
+          "https://mirrors.mit.edu/ubuntu-releases/",
+          "https://mirror.aarnet.edu.au/pub/ubuntu/releases/",
+          "https://ftp.jaist.ac.jp/pub/Linux/ubuntu-releases/"
+        ]
       }
     ],
     "channels": [
@@ -103,6 +127,18 @@
         "pattern": "^Kubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -146,6 +182,18 @@
       {
         "path": ".disk/info",
         "pattern": "^Xubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
       }
     ],
     "channels": [
@@ -193,6 +241,18 @@
         "pattern": "^Lubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -238,6 +298,18 @@
         "pattern": "^Ubuntu-MATE (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -267,6 +339,18 @@
       {
         "path": ".disk/info",
         "pattern": "^Ubuntu-Budgie (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
       }
     ],
     "channels": [
@@ -314,6 +398,18 @@
         "pattern": "^Ubuntu-Studio (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -357,6 +453,18 @@
       {
         "path": ".disk/info",
         "pattern": "^Ubuntu-Cinnamon (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
       }
     ],
     "channels": [
@@ -404,6 +512,18 @@
         "pattern": "^Ubuntu-Unity (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -449,6 +569,18 @@
         "pattern": "^Ubuntu-Kylin (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "lts",
@@ -492,6 +624,18 @@
       {
         "path": ".disk/info",
         "pattern": "^Edubuntu (\\d+\\.\\d+(?:\\.\\d+)?)\\b"
+      }
+    ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.ubuntu.com/",
+        "to": [
+          "https://mirrors.mit.edu/ubuntu-cdimage/",
+          "https://mirror.leaseweb.com/ubuntu-cdimage/",
+          "https://ftp.acc.umu.se/mirror/cdimage.ubuntu.com/",
+          "https://mirrors.tuna.tsinghua.edu.cn/ubuntu-cdimage/",
+          "https://mirrors.ustc.edu.cn/ubuntu-cdimage/"
+        ]
       }
     ],
     "channels": [
@@ -701,6 +845,18 @@
         "pattern": "^Debian GNU/Linux (\\d+\\.\\d+\\.\\d+)\\b"
       }
     ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.debian.org/debian-cd/",
+        "to": [
+          "https://mirrors.edge.kernel.org/debian-cd/",
+          "https://ftp.fau.de/debian-cd/",
+          "https://mirror.csclub.uwaterloo.ca/debian-cd/",
+          "https://mirror.aarnet.edu.au/pub/debian-cd/",
+          "https://ftp.jaist.ac.jp/pub/Linux/debian-cd/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "netinst",
@@ -736,6 +892,18 @@
       {
         "path": ".disk/info",
         "pattern": "^Debian GNU/Linux (\\d+\\.\\d+\\.\\d+)\\b"
+      }
+    ],
+    "mirrors": [
+      {
+        "from": "https://cdimage.debian.org/debian-cd/",
+        "to": [
+          "https://mirrors.edge.kernel.org/debian-cd/",
+          "https://ftp.fau.de/debian-cd/",
+          "https://mirror.csclub.uwaterloo.ca/debian-cd/",
+          "https://mirror.aarnet.edu.au/pub/debian-cd/",
+          "https://ftp.jaist.ac.jp/pub/Linux/debian-cd/"
+        ]
       }
     ],
     "channels": [
@@ -803,6 +971,18 @@
     "homepage": "https://www.kali.org/get-kali/",
     "isBuiltIn": true,
     "volumeLabelPattern": "^Kali Linux amd64",
+    "mirrors": [
+      {
+        "from": "https://cdimage.kali.org/",
+        "to": [
+          "https://kali.download/base-images/",
+          "https://ftp.halifax.rwth-aachen.de/kali-images/",
+          "https://mirrors.ocf.berkeley.edu/kali-images/",
+          "https://ftp.jaist.ac.jp/pub/Linux/kali-images/",
+          "https://mirror.aarnet.edu.au/pub/kali/kali-images/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "installer",
@@ -859,6 +1039,18 @@
     "homepage": "https://mxlinux.org/download-links/",
     "isBuiltIn": true,
     "volumeLabelPattern": "^MX-Live",
+    "mirrors": [
+      {
+        "from": "https://mirrors.rit.edu/mxlinux/mx-isos/",
+        "to": [
+          "https://ftp.fau.de/mxlinux-cd/",
+          "https://mirrors.dotsrc.org/mx-isos/",
+          "https://mirror.csclub.uwaterloo.ca/mxlinux-iso/",
+          "https://ftp.yz.yamagata-u.ac.jp/pub/linux/MX-Linux/",
+          "https://ftp.kaist.ac.kr/mxlinux-iso/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "xfce",
@@ -1922,6 +2114,18 @@
     "homepage": "https://www.freebsd.org/where/",
     "isBuiltIn": true,
     "volumeLabelPattern": "^FreeBSD_Install$",
+    "mirrors": [
+      {
+        "from": "https://download.freebsd.org/",
+        "to": [
+          "https://ftp.halifax.rwth-aachen.de/freebsd/",
+          "https://mirrors.mit.edu/FreeBSD/",
+          "https://mirror.aarnet.edu.au/pub/FreeBSD/",
+          "https://ftp.jaist.ac.jp/pub/FreeBSD/",
+          "https://ftp.kaist.ac.kr/FreeBSD/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "disc1",
@@ -2084,6 +2288,18 @@
     "homepage": "https://tails.net/install/",
     "isBuiltIn": true,
     "volumeLabelPattern": "^TAILS (\\d+\\.\\d+(?:\\.\\d+)?) ",
+    "mirrors": [
+      {
+        "from": "https://download.tails.net/tails/",
+        "to": [
+          "https://ftp.fau.de/tails/",
+          "https://ftp.halifax.rwth-aachen.de/tails/",
+          "https://ftp.lysator.liu.se/pub/tails/",
+          "https://mirrors.dotsrc.org/tails/",
+          "https://mirror.clarkson.edu/tailsos/tails/"
+        ]
+      }
+    ],
     "channels": [
       {
         "id": "default",
