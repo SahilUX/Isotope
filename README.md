@@ -63,6 +63,16 @@ The file list lasts until you quit Isotope. **Remove** clears a file from the li
 
 *Activity records every download, copy and flash. Failures stay in the history with the reason they failed.*
 
+## Downloading from the fastest mirror
+
+One distribution server can be slow or far away from you. For entries whose publishers run official mirror networks (Ubuntu and its flavours, Debian, Kali, MX Linux, FreeBSD and Tails), the catalog lists a few long-lived https mirrors on different continents. Before a download starts, Isotope requests the first 1 MiB of the file from the original server and from each mirror at the same time, and uses the fastest. This takes a few seconds at most, and Activity shows **Finding the fastest mirror** while it runs.
+
+- A mirror is used only if it serves a file of exactly the expected size, and only if it was at least 25% faster than the original server.
+- If the chosen mirror refuses the download or fails before sending any data, Isotope moves to the next server. The original server is always on that list.
+- The SHA-256 checksum still comes from the original server and is verified as usual, whichever server sent the file.
+- The history line names the mirror when one was used.
+- To turn it off, clear **Download from the fastest mirror** in Settings. Every download then comes from the original server, and no mirror is contacted.
+
 ## The awkward cases
 
 - **Windows.** Microsoft's links are session-generated, so its ISOs can't be hotlinked. Isotope tracks the current feature release, opens the official download page, then verifies and places the file you downloaded. Once it is on the drive the download is moved to the Trash by default. It is your file, so it stays recoverable.
@@ -160,7 +170,7 @@ Everything runs offline against fixtures. No network, no USB device, no admin ri
 ./Scripts/verify-catalog.sh
 ```
 
-Resolves every entry against its real source and prints the version, ISO URL, and checksum status. Run this after editing `catalog.json`, or whenever you suspect a distro changed its layout.
+Resolves every entry against its real source and prints the version, ISO URL, and checksum status. It also sends a HEAD request to each mirror of the resolved ISO and prints a warning when a mirror does not return 200, the same Content-Length as the original, and `Accept-Ranges: bytes`. Mirror warnings do not change the exit status. Run this after editing `catalog.json`, or whenever you suspect a distro changed its layout.
 
 ---
 
@@ -202,13 +212,13 @@ The cache does not accumulate. By default an ISO is deleted the moment it has be
 
 *Settings. Every option that changes what touches your disk explains itself in place.*
 
-No telemetry. The app talks only to the ISO sources in the catalog, their checksum files, and the GitHub API for entries that use it.
+No telemetry. The app talks only to the ISO sources in the catalog, their checksum files, the mirrors the catalog lists for them, and the GitHub API for entries that use it. Before each new download of an entry with mirrors, every listed mirror receives one 1 MiB range request for that ISO, unless **Download from the fastest mirror** is off.
 
 ---
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested. 253 unit tests in `IsotopeCore`, 236 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested. 276 unit tests in `IsotopeCore`, 247 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

@@ -308,3 +308,11 @@ The early delete now targets `replacedURL`. Its input is always the cache or the
 `TransferSummary.phaseAndPercent(_:fraction:)` renders "Copying to drive · 10%", used by both drive-row badges. Activity keeps its full-width bar and byte counts.
 
 Worth keeping in mind for anything that writes to removable media: a write that returns quickly has not necessarily happened. `FlashEngine` was already honest, because a raw `/dev/rdiskN` write bypasses the cache by definition — which is why flash rates never showed this.
+
+## 19. v1.13 addendum — mirror probing (implements PRD F73)
+
+Split along the portability line, as usual. **IsotopeCore** owns the data and every decision: `MirrorRule` (on `CatalogEntry`, with an optional `Channel` override that replaces it, like `contentProbes`), `MirrorCandidates.candidates(for:rules:)`, `MirrorProbeRun.collect` (the concurrent probe and its deadlines, written against an injected per-URL closure so it is tested with fake timings), and `MirrorRanking.rank`, which turns results into an ordered URL list. `CatalogEntry` gained a hand-written `encode(to:)` so an entry without mirrors is written exactly as before.
+
+The **app** supplies the measurement and the wiring. `MirrorProbing` is the seam `DownloadManager` takes in its initialiser; `URLSessionMirrorProber` is the default, with its own ephemeral session and a data task per candidate, so a server that ignores `Range` is cut off at the response rather than read. `ISORequest.alternateURLs` carries the candidates from `AppStore.mirrorAlternates` (used by both `UpdateEngine` and `FlashEngine`) and is deliberately outside `cacheKey`: the cache is keyed, and adopted, under the catalog URL whichever server delivered.
+
+In `DownloadManager.download`, probing happens after the slot is acquired and only when there is no resume data. The probe is an unstructured task in `probeTasks`, so `cancel` and `pause` can stop it. `transferFromBestSource` walks the ranking; `finishTransfer` throws the private `FailOver` in place of an HTTP refusal, or of a transport failure at zero bytes, whenever another source remains — so the existing failure handling, resume bookkeeping included, only ever sees the last source's outcome. `DownloadStage.probing` maps to `UpdateOperationState.Phase.findingMirror`, which is pausable and draws an indeterminate bar.
