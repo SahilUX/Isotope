@@ -8,6 +8,11 @@ public struct InterruptedDownload: Codable, Identifiable, Hashable, Sendable {
     /// The cache key of the artifact being fetched — also the resume file's stem.
     public var id: String
     public var sourceURL: URL
+    /// The URL the transfer actually started from — a mirror, when one was
+    /// picked. Resume data does not name its server, so this is how a download
+    /// resumed after a relaunch still says where it came from. Nil in records
+    /// written before it existed, and when the source is unknown.
+    public var startedFromURL: URL?
     public var fileName: String
     public var sha256: String?
     public var expectedSizeBytes: Int64?
@@ -27,9 +32,11 @@ public struct InterruptedDownload: Codable, Identifiable, Hashable, Sendable {
                 expectedSizeBytes: Int64? = nil, bytesDownloaded: Int64 = 0,
                 driveID: UUID? = nil, driveName: String? = nil, entryID: String? = nil,
                 channelID: String? = nil, assignmentID: UUID? = nil,
-                interruptedAt: Date = Date(), wasPaused: Bool = false) {
+                interruptedAt: Date = Date(), wasPaused: Bool = false,
+                startedFromURL: URL? = nil) {
         self.id = id
         self.sourceURL = sourceURL
+        self.startedFromURL = startedFromURL
         self.fileName = fileName
         self.sha256 = sha256
         self.expectedSizeBytes = expectedSizeBytes

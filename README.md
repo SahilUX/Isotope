@@ -218,7 +218,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Alpha status
 
-Alpha means the shape is settled and the guts are tested. 276 unit tests in `IsotopeCore`, 247 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+Alpha means the shape is settled and the guts are tested. 278 unit tests in `IsotopeCore`, 248 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

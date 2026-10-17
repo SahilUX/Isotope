@@ -131,6 +131,31 @@ final class MirrorSelectionTests: XCTestCase {
         XCTAssertTrue(MirrorStubProtocol.visits(for: request.fileName).isEmpty)
     }
 
+    func testAResumedDownloadKeepsTheHostItStartedFrom() async throws {
+        // A relaunch: the manifest names the mirror the transfer began on, and
+        // that survives the resumed attempt rather than being forgotten. (The
+        // blob is not real resume data, so the attempt fails and re-records —
+        // the manifest is the observable.) The mirror is no longer one of the
+        // request's candidates, which must not matter.
+        let prober = FakeProber { urls in urls.map { self.answered($0, seconds: 0.1) } }
+        let request = request(alternates: [])
+        let started = url("gone.test", request.fileName)
+        try JSONStore.save([InterruptedDownload(id: request.cacheKey, sourceURL: request.sourceURL,
+                                                fileName: request.fileName, wasPaused: true,
+                                                startedFromURL: started)],
+                           to: locations.resumeManifest)
+        try Data("not really resume data".utf8)
+            .write(to: locations.resume.appendingPathComponent("\(request.cacheKey).resume"))
+        let relaunched = makeManager(prober: prober)
+
+        _ = try? await relaunched.ensureLocalISO(request) { _, _ in }
+
+        XCTAssertTrue(prober.calls.isEmpty)
+        let manifest = JSONStore.load([InterruptedDownload].self, from: locations.resumeManifest,
+                                      default: [])
+        XCTAssertEqual(manifest.first?.startedFromURL, started)
+    }
+
     // MARK: - Failing over
 
     func testARefusingMirrorFallsThroughToTheNextSource() async throws {
