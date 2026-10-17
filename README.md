@@ -16,12 +16,12 @@ Requires macOS 14 or later. Universal binary (Apple Silicon + Intel). No third-p
 
 ## What it tracks
 
-56 operating systems across 106 channels, grouped by organization:
+56 operating systems across 104 channels, grouped by organization:
 
 | | |
 |---|---|
 | **Ubuntu** | Ubuntu Desktop, Ubuntu Server, Kubuntu, Xubuntu, Lubuntu, Ubuntu MATE, Ubuntu Budgie, Ubuntu Studio, Ubuntu Cinnamon, Ubuntu Unity, Ubuntu Kylin, Edubuntu (LTS + Latest channels) |
-| **Debian family** | Debian (netinst + DVD), Debian Live (6 desktops), Linux Mint Cinnamon/MATE/Xfce, LMDE, Pop!_OS (Intel + NVIDIA), Kali Linux (installer, netinst, live, everything, purple), MX Linux (Xfce, KDE, Fluxbox), Parrot OS |
+| **Debian family** | Debian (netinst + DVD), Debian Live (6 desktops), Linux Mint Cinnamon/MATE/Xfce, LMDE, Pop!_OS (Intel + NVIDIA), Kali Linux (installer, netinst, purple), MX Linux (Xfce, KDE, Fluxbox), Parrot OS |
 | **Fedora** | Workstation, KDE Plasma, Server (DVD + netinst), Everything, Silverblue, Kinoite, and a Spins entry covering Xfce, Cinnamon, MATE, LXQt, LXDE, Sway, Budgie, i3 and COSMIC |
 | **Enterprise** | Rocky Linux, AlmaLinux (Minimal/DVD/Boot), CentOS Stream (DVD + Boot), Proxmox VE, Proxmox Backup Server, Proxmox Mail Gateway, Proxmox Datacenter Manager |
 | **Arch family** | Arch Linux, Manjaro (KDE, GNOME, Xfce), CachyOS (desktop + handheld) |
@@ -30,7 +30,7 @@ Requires macOS 14 or later. Universal binary (Apple Silicon + Intel). No third-p
 | **Tools & rescue** | SystemRescue, GParted Live, Clonezilla Live, Memtest86+, Tails |
 | **Microsoft** | Windows 11, Windows 10 (tracked by feature release, media revision and exact build, see below; download is browser-assisted) |
 
-An entry ships only when its version can be resolved from a stable machine-readable source and the publisher publishes a SHA-256 Isotope can parse. That rule is why some popular distributions are missing: EndeavourOS and ShredOS publish SHA-512/SHA-1 only, Zorin OS and elementary OS put their downloads behind scripts rather than links, Devuan and Deepin ship no parsable sums file, XCP-ng publishes no checksums beside its ISOs. Each of those is one `catalog.json` entry away the moment that changes.
+An entry ships only when its version can be resolved from a stable machine-readable source and the publisher publishes a SHA-256 Isotope can parse. That rule is why some popular distributions are missing: EndeavourOS and ShredOS publish SHA-512/SHA-1 only, Zorin OS and elementary OS put their downloads behind scripts rather than links, Devuan and Deepin ship no parsable sums file, XCP-ng publishes no checksums beside its ISOs. Kali's Live and Installer Everything images are left out too: since 2026.1 Kali publishes them only as torrents, so their checksums are listed but no HTTP download exists. Each of those is one `catalog.json` entry away the moment that changes.
 
 Anything not in the catalog can be added as a custom source. There are four detection mechanisms, each with a live "Test" button so you can see exactly what it parses before saving.
 
