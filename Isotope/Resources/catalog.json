@@ -1003,24 +1003,6 @@
         }
       },
       {
-        "id": "live",
-        "name": "Live",
-        "provider": {
-          "mechanism": "checksumFile",
-          "url": "https://cdimage.kali.org/current/SHA256SUMS",
-          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-live-amd64\\.iso$"
-        }
-      },
-      {
-        "id": "everything",
-        "name": "Installer Everything",
-        "provider": {
-          "mechanism": "checksumFile",
-          "url": "https://cdimage.kali.org/current/SHA256SUMS",
-          "filePattern": "^kali-linux-(\\d{4}\\.\\d+)-installer-everything-amd64\\.iso$"
-        }
-      },
-      {
         "id": "purple",
         "name": "Purple",
         "provider": {

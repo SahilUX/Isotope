@@ -34,6 +34,10 @@ struct Row: Sendable {
     let failure: String?
     /// PRD F73: alternates checked, how many did not match, and why.
     var mirrors = MirrorCheck()
+    /// Set when the resolved ISO URL itself does not answer 2xx. Unlike a mirror
+    /// problem, this fails the run: the catalog would offer an update the app
+    /// can never download.
+    var originProblem: String?
 }
 
 struct MirrorCheck: Sendable {
@@ -69,6 +73,19 @@ func head(_ url: URL) async -> HeadInfo {
         return HeadInfo(status: nil, contentLength: nil, acceptsRanges: false,
                         error: (error as? LocalizedError)?.errorDescription ?? "\(error)")
     }
+}
+
+/// The resolved ISO URL must itself answer 2xx. A checksum file can list images
+/// the server only offers as torrents (Kali Live and Installer Everything did),
+/// so a channel can resolve and still be undownloadable. Returns the problem,
+/// or nil when the URL is fine.
+func checkOrigin(_ isoURL: URL) async -> String? {
+    let info = await head(isoURL)
+    if let error = info.error { return "ISO URL unreachable: \(error)" }
+    guard let status = info.status, (200..<300).contains(status) else {
+        return "ISO URL answered HTTP \(info.status.map(String.init) ?? "?"): \(isoURL.absoluteString)"
+    }
+    return nil
 }
 
 /// PRD F73: every alternate must answer 200 with the origin's Content-Length
@@ -130,6 +147,7 @@ let rows: [Row] = await withTaskGroup(of: Row.self) { group in
                     var row = Row(label: label, mechanism: channel.provider.mechanism.rawValue,
                                   release: release, failure: nil)
                     if let isoURL = release.isoURL {
+                        row.originProblem = await checkOrigin(isoURL)
                         row.mirrors = await checkMirrors(entry: entry, channel: channel, isoURL: isoURL)
                     }
                     return row
@@ -151,7 +169,11 @@ var mirrorWarnings = 0
 print("Catalog: \(catalogURL.path)")
 print(String(repeating: "=", count: 72))
 for row in rows {
-    if let release = row.release {
+    if let release = row.release, let problem = row.originProblem {
+        failures += 1
+        print("FAIL \(row.label)  [\(row.mechanism)]")
+        print("     resolved \(release.displayVersion), but \(problem)")
+    } else if let release = row.release {
         let hash = release.sha256.map { String($0.prefix(16)) + "…" } ?? "none (unverified)"
         let size = release.sizeBytes.map { "\($0 / 1_048_576) MB" } ?? "unknown"
         print("OK   \(row.label)  [\(row.mechanism)]")
