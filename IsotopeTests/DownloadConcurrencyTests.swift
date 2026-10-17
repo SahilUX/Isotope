@@ -167,6 +167,8 @@ final class DownloadConcurrencyTests: XCTestCase {
         XCTAssertEqual(manifest.map(\.id), [first.cacheKey])
         XCTAssertTrue(manifest[0].wasPaused)
         XCTAssertEqual(manifest[0].fileName, "quitting.iso")
+        XCTAssertEqual(manifest[0].startedFromURL, first.sourceURL,
+                       "a relaunch needs to know where the bytes came from")
 
         await manager.cancel(cacheKey: first.cacheKey)
         _ = await run.result

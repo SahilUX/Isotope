@@ -420,11 +420,17 @@ actor DownloadManager: ISOProviding {
     /// PRD F73: a fresh start first times the mirrors (inside the slot, so
     /// probing never competes with a running download for the line) and then
     /// works down the ranking. Returns the file and the URL it came from — nil
-    /// when that is unknown, as for a transfer resumed after a relaunch (its
-    /// resume data carries its own URL, and nothing here reads it).
+    /// when that is unknown. A transfer resumed after a relaunch takes it from
+    /// the manifest (the resume data pins the server, so nothing is re-probed).
     private func download(_ request: ISORequest) async throws -> (file: URL, source: URL?) {
         let key = request.cacheKey
         var resumeData = loadResumeData(key: key)
+        // After a relaunch the in-memory source is gone; the manifest kept it.
+        // The URL may no longer be among the entry's candidates — it is only
+        // used to name the host, never to fetch, so that does not matter.
+        if resumeData != nil, sourcesInUse[key] == nil {
+            sourcesInUse[key] = interrupted[key]?.startedFromURL
+        }
         var sources: [URL]?
         while true {
             if cancelledKeys.contains(key) { throw DownloadError.cancelled }
@@ -499,8 +505,8 @@ actor DownloadManager: ISOProviding {
                                         sources: [URL]) async throws -> (file: URL, source: URL?) {
         let key = request.cacheKey
         if let resumeData {
-            // Unknown after a relaunch, which is fine: nil only means the
-            // history line does not name a server.
+            // nil (an old manifest) only means the history line does not name
+            // a server.
             return (try await transfer(request, resumeData: resumeData, from: request.sourceURL,
                                        canFailOver: false), sourcesInUse[key])
         }
@@ -723,7 +729,8 @@ actor DownloadManager: ISOProviding {
             sha256: request.sha256, expectedSizeBytes: request.expectedSizeBytes,
             bytesDownloaded: bytes, driveID: context?.driveID, driveName: context?.driveName,
             entryID: context?.entryID, channelID: context?.channelID,
-            assignmentID: context?.assignmentID, interruptedAt: Date(), wasPaused: paused)
+            assignmentID: context?.assignmentID, interruptedAt: Date(), wasPaused: paused,
+            startedFromURL: sourcesInUse[request.cacheKey])
     }
 
     private func persistInterrupted() {
