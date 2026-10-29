@@ -235,3 +235,7 @@ The most useful bug report names the drive type, the entry, and what the row sai
 ## Documentation
 
 `docs/` holds the full specification: [BRD.md](docs/BRD.md) (scope and rationale), [PRD.md](docs/PRD.md) (numbered requirements, including every addendum), and [DESIGN.md](docs/DESIGN.md) (architecture and technical decisions).
+
+## License
+
+Isotope is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
