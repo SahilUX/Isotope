@@ -5,7 +5,7 @@ Templates the project lead fills in for workers and reviewers, and a note on how
 ## Worker brief
 
 ```text
-You are the <core | app | designer | tester> worker on Isotope. Work only inside the current directory, a git worktree on branch `<branch>`. Read AGENTS.md first.
+You are the <core | app | designer | tester> worker on Isotope. Work only inside the git worktree `<absolute worktree path>` on branch `<branch>`: `cd` there first and use absolute paths, because your starting directory may be a different checkout. Read AGENTS.md first.
 
 Task: <one paragraph: what to change and why>
 
