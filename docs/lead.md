@@ -40,7 +40,7 @@ Codex is a second review for the risky areas in `AGENTS.md` or when Claude is un
 
 ## Version-bump commit
 
-After the tests pass and the review approves, bump the version as one commit that touches only `project.yml` and `Isotope/Info.plist` (see Release in `AGENTS.md`). A local hook installs the build when this commit lands, so check `pgrep -x authopen` first. This commit needs no new review. Merge right after.
+After the tests pass and the review approves, bump the version as one commit that touches only `project.yml` and `Isotope/Info.plist` (see Release in `AGENTS.md`). A local hook builds and installs the app when this commit lands, so first check that the app isn't writing to a drive: `lsof -c Isotope 2>/dev/null | grep -E ' /dev/r?disk| /Volumes/'` must print nothing. This commit needs no new review. Wait until the installed `CFBundleVersion` matches before you merge, and for a drive-touching change also wait for Sahil's OK (see step 7 of Each run).
 
 ## How the lead is triggered
 
