@@ -11,3 +11,7 @@ Package.resolved
 
 # macOS
 .DS_Store
+
+# Per-machine agent notes and worktrees
+CLAUDE.local.md
+.worktrees/
