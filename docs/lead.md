@@ -11,11 +11,11 @@ Task: <one paragraph: what to change and why>
 
 - <concrete requirement>
 - <concrete requirement>
-- Run the tests from AGENTS.md "Build and test": `swift test --package-path IsotopeCore` for IsotopeCore work, and for app work also `xcodegen generate && xcodebuild -project Isotope.xcodeproj -scheme Isotope -derivedDataPath "$TMPDIR/isotope-dd" test`. Report the results, then delete `$TMPDIR/isotope-dd`.
+- Run the tests from AGENTS.md "Build and test": `swift test --package-path IsotopeCore` for IsotopeCore work, and for app work also `xcodegen generate && xcodebuild -project Isotope.xcodeproj -scheme Isotope -derivedDataPath "$TMPDIR/isotope-dd" test`. The app-layer suite starts the real app against the real state folder, so run it only if `! pgrep -x Isotope && [ -z "$(diskutil list external physical)" ]` succeeds; otherwise skip it and say so, and the lead runs it. Report the results, then delete `$TMPDIR/isotope-dd`.
 - Add or update a test for any behaviour you change. Keep IsotopeCore free of SwiftUI, AppKit, CryptoKit and DiskArbitration.
 - Catalog work: run `Scripts/verify-catalog.sh` and report each channel it flags.
 
-Never touch a real USB device, never launch or drive /Applications/Isotope.app, and never read or write ~/Library/Application Support/Isotope or ~/Library/Caches/Isotope. Tests use fakes and temporary directories. Don't commit, push, open a PR, or use Plane; the lead does that. Change nothing outside the task, and don't change the version.
+Never touch a real USB device, never launch or drive /Applications/Isotope.app, and never read or write ~/Library/Application Support/Isotope or ~/Library/Caches/Isotope (the app-layer suite's own rewrite of release-cache.json is the one known exception). Tests use fakes and temporary directories. Don't commit, push, open a PR, or use Plane; the lead does that. Change nothing outside the task, and don't change the version.
 
 Finish with a short report: files changed, test results, anything you were unsure about. For UI work, list the views to look at.
 ```
@@ -40,13 +40,13 @@ Codex is a second review for the risky areas in `AGENTS.md` or when Claude is un
 
 ## Version-bump commit
 
-After the tests pass and the review approves, bump the version as one commit that touches only `project.yml` and `Isotope/Info.plist` (see Release in `AGENTS.md`). A local hook builds and installs the app when this commit lands, so first check that the app isn't writing to a drive: `lsof -c Isotope 2>/dev/null | grep -E ' /dev/r?disk| /Volumes/'` must print nothing. This commit needs no new review. Wait until the installed `CFBundleVersion` matches before you merge, and for a drive-touching change also wait for Sahil's OK (see step 7 of Each run).
+After the tests pass and the review approves, bump the version as one commit that touches only `project.yml` and `Isotope/Info.plist` (see Release in `AGENTS.md`), after every required review has approved. A local hook builds and installs the app when this commit lands, so first check that the app isn't writing to a drive: `lsof -c Isotope 2>/dev/null | grep -E ' /dev/r?disk| /Volumes/'` must print nothing. This commit needs no new review. Wait until the installed `CFBundleVersion` matches before you merge, and for a drive-touching change also wait for Sahil's OK (see step 7 of Each run).
 
 ## How the lead is triggered
 
 Two T3 scheduled tasks in the Isotope project on this Mac start the lead:
 
-- "Isotope lead: weekly check", Wednesdays at 09:00 Dubai. It checks usage, runs `Scripts/verify-catalog.sh`, triages Intake (Scout's items only after the Verifier's comment), and takes at most two accepted items to Done. Anything that needs Sahil goes in one thread titled with a warning sign, left unsettled so it stays visible.
+- "Isotope lead: weekly check", Wednesdays at 09:00 Dubai. It checks usage, runs `Scripts/verify-catalog.sh`, triages Intake (Scout's items only after the Verifier's comment), and takes at most two accepted items to Done. Anything that needs Sahil is a Plane item with `needs-sahil`; the run's T3 thread gets a warning sign in its title and is left unsettled, so it stays visible and points at those items.
 - "Isotope lead: Plane events", a webhook task. Plane's webhook calls it on Intake and comment events; the task filters to the Isotope project and ignores the lead's own activity. Deliveries within five minutes coalesce into one run. The webhook URL is a secret and lives in the owner-only file `~/.config/plane/isotope-webhook.url`, never in the repo. The task stays disabled until the Plane webhook is added and enabled.
 
 The lead's Plane account is `isotope-lead`, a Contributor on the Isotope project only. Its token is in `~/.config/plane/isotope-lead.token` and reaches the `plane-lead` MCP in `.mcp.json` through `~/.config/plane/headers.sh isotope-lead`.
