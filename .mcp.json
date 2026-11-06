@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "plane-lead": {
+      "type": "http",
+      "url": "https://mcp.plane.so/http/api-key/mcp",
+      "headersHelper": "~/.config/plane/headers.sh isotope-lead"
+    }
+  }
+}
