@@ -11,7 +11,7 @@ Task: <one paragraph: what to change and why>
 
 - <concrete requirement>
 - <concrete requirement>
-- Run the tests from AGENTS.md "Build and test": `swift test --package-path IsotopeCore` for IsotopeCore work, and for app work also `xcodegen generate && xcodebuild -project Isotope.xcodeproj -scheme Isotope -derivedDataPath "$TMPDIR/isotope-dd" test`. The app-layer suite starts the real app against the real state folder, so run it only if `! pgrep -x Isotope && [ -z "$(diskutil list external physical)" ]` succeeds; otherwise skip it and say so, and the lead runs it. Report the results, then delete `$TMPDIR/isotope-dd`.
+- Run the tests from AGENTS.md "Build and test": `swift test --package-path IsotopeCore` for IsotopeCore work, and for app work also `xcodegen generate && xcodebuild -project Isotope.xcodeproj -scheme Isotope -derivedDataPath "$TMPDIR/isotope-dd" test`. The app-layer suite starts the real app against the real state folder, so run it only if `! pgrep -x Isotope && out=$(diskutil list external physical) && [ -z "$out" ]` succeeds (run it with the sandbox off); otherwise skip the suite and say so, and the lead runs it. Report the results, then delete `$TMPDIR/isotope-dd`.
 - Add or update a test for any behaviour you change. Keep IsotopeCore free of SwiftUI, AppKit, CryptoKit and DiskArbitration.
 - Catalog work: run `Scripts/verify-catalog.sh` and report each channel it flags.
 
