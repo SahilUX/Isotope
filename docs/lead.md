@@ -31,7 +31,7 @@ You are an outside reviewer for the Isotope repo, a macOS app that writes ISO fi
 
 Check correctness: bugs, missing failure cases, claims that don't match the repo (paths, commands, hooks, how it builds, tests or ships), contradictions with AGENTS.md, and rules that would mislead an agent. For code, also check: nothing unverified reaches a drive; a delete or flash can't hit the wrong file or device; IsotopeCore imports only Foundation; no new dependency; tests are offline and use fakes; old drives.json, history.json and custom-sources.json still load; README counts and figures match; no secret, token, personal path or private address in the diff. Skip style nits.
 
-Don't edit files. Reply with exactly one first line, `VERDICT: APPROVE` or `VERDICT: CHANGES`, then a numbered list of findings, each with file:line, what is wrong, and the fix. APPROVE means nothing must change before merge; list optional suggestions separately under "Optional".
+Don't edit files, run the app or the app-layer tests, touch any drive or ~/Library/*/Isotope, use Plane, or comment on or approve the PR with `gh`. Reply with exactly one first line, `VERDICT: APPROVE` or `VERDICT: CHANGES`, then a numbered list of findings, each with file:line, what is wrong, and the fix. APPROVE means nothing must change before merge; list optional suggestions separately under "Optional".
 
 DIFF:
 ```
@@ -40,7 +40,7 @@ Codex is a second review for the risky areas in `AGENTS.md` or when Claude is un
 
 ## Version-bump commit
 
-After the tests pass and the review approves, bump the version as one commit that touches only `project.yml` and `Isotope/Info.plist` (see Release in `AGENTS.md`), after every required review has approved. A local hook builds and installs the app when this commit lands, so first check that the app isn't writing to a drive: `lsof -c Isotope 2>/dev/null | grep -E ' /dev/r?disk| /Volumes/'` must print nothing. This commit needs no new review. Wait until the installed `CFBundleVersion` matches before you merge, and for a drive-touching change also wait for Sahil's OK (see step 7 of Each run).
+After the tests pass and the review approves, bump the version as one commit that touches only `project.yml` and `Isotope/Info.plist` (see Release in `AGENTS.md`), after every required review has approved. Check `git diff --cached` before you commit, not after. A local hook builds and installs the app when this commit lands, so first check that the app isn't writing to a drive: `lsof -c Isotope 2>/dev/null | grep -E ' /dev/r?disk| /Volumes/'` must print nothing. This commit needs no new review. Wait until the installed `CFBundleVersion` matches before you merge, and for a drive-touching change also wait for Sahil's OK (see step 7 of Each run).
 
 ## How the lead is triggered
 
