@@ -238,4 +238,4 @@ The most useful bug report names the drive type, the entry, and what the row sai
 
 ## License
 
-Isotope is licensed under the GNU General Public License v3.0. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
