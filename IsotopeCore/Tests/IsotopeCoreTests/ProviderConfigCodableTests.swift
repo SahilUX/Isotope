@@ -172,7 +172,7 @@ final class ProviderConfigCodableTests: XCTestCase {
         XCTAssertEqual(checked, 11, "expected the 11 Ubuntu-family latest channels")
     }
 
-    /// Runs the shipped Ubuntu Desktop and Kubuntu "latest" configs against
+    /// Runs the shipped Ubuntu Desktop and Ubuntu Server "latest" configs against
     /// listings shaped like the real ones: 26.10 wins over 26.04.1 and 26.04.
     func testBundledUbuntuLatestChannelsResolveTheNewestSeries() async throws {
         let entries = try bundledCatalog()

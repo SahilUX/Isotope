@@ -28,7 +28,7 @@ actor CatalogService {
     /// PRD F50: the sweep starts by forgetting anything the coalescing client
     /// remembered, so "Check Now" always means the network. Within the sweep it
     /// still collapses the URLs that several channels share — one request for
-    /// Ubuntu's meta-release, not twenty-four.
+    /// Ubuntu's meta-release-lts, not one per LTS channel.
     func check(entries: [CatalogEntry],
                report: @escaping @Sendable (ReleaseKey, Outcome) async -> Void) async {
         if let resolver = resolver as? VersionResolver,
