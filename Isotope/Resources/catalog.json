@@ -45,10 +45,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://releases.ubuntu.com/26.04/SHA256SUMS",
+          "url": "https://releases.ubuntu.com/26.10/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://releases.ubuntu.com/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://releases.ubuntu.com/{version}/SHA256SUMS"
           },
           "filePattern": "^ubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -102,10 +102,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://releases.ubuntu.com/26.04/SHA256SUMS",
+          "url": "https://releases.ubuntu.com/26.10/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://releases.ubuntu.com/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://releases.ubuntu.com/{version}/SHA256SUMS"
           },
           "filePattern": "^ubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-live-server-amd64\\.iso$"
@@ -159,10 +159,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/kubuntu/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/kubuntu/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/kubuntu/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/kubuntu/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^kubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -216,10 +216,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/xubuntu/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/xubuntu/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/xubuntu/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/xubuntu/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^xubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -273,10 +273,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/lubuntu/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/lubuntu/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/lubuntu/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/lubuntu/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^lubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -373,10 +373,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/ubuntu-budgie/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^ubuntu-budgie-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -430,10 +430,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/ubuntustudio/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/ubuntustudio/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^ubuntustudio-(\\d+\\.\\d+(?:\\.\\d+)?)-(?:dvd|desktop)-amd64\\.iso$"
@@ -487,10 +487,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/ubuntucinnamon/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^ubuntucinnamon-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -544,10 +544,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/ubuntu-unity/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/ubuntu-unity/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/ubuntu-unity/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/ubuntu-unity/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^ubuntu-unity-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -601,10 +601,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/ubuntukylin/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/ubuntukylin/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/ubuntukylin/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/ubuntukylin/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^ubuntukylin-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"
@@ -658,10 +658,10 @@
         "name": "Latest",
         "provider": {
           "mechanism": "checksumFile",
-          "url": "https://cdimage.ubuntu.com/edubuntu/releases/26.04/release/SHA256SUMS",
+          "url": "https://cdimage.ubuntu.com/edubuntu/releases/26.10/release/SHA256SUMS",
           "index": {
-            "url": "https://changelogs.ubuntu.com/meta-release",
-            "pattern": "Version: (\\d+\\.\\d+)[^\\n]*\\nDate:[^\\n]*\\nSupported: 1",
+            "url": "https://cdimage.ubuntu.com/edubuntu/releases/",
+            "pattern": "href=\"(\\d+\\.\\d+)/\"",
             "target": "https://cdimage.ubuntu.com/edubuntu/releases/{version}/release/SHA256SUMS"
           },
           "filePattern": "^edubuntu-(\\d+\\.\\d+(?:\\.\\d+)?)-desktop-amd64\\.iso$"

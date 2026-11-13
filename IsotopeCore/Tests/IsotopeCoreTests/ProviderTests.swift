@@ -70,6 +70,73 @@ final class ChecksumFileProviderTests: XCTestCase {
                        ["https://releases.example/", "https://releases.example/26.04/SHA256SUMS", sumsURL])
     }
 
+    // Ubuntu "Latest" channels read the release directory listing, not the
+    // `meta-release` feed (which skipped 26.10). The listing also holds point
+    // release directories; only plain series directories may match.
+    private let listingIndex = IndexStep(url: URL(string: "https://releases.example/")!,
+                                         pattern: #"href="(\d+\.\d+)/""#,
+                                         target: "https://releases.example/{version}/SHA256SUMS")
+
+    func testDirectoryListingIndexResolvesTheHighestSeries() async throws {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", fixture: "ubuntu-releases-listing.html")
+        http.stub("https://releases.example/26.10/SHA256SUMS", fixture: "ubuntu-26.10-SHA256SUMS.txt")
+        let release = try await ChecksumFileProvider(http: http).fetchLatest(config: .checksumFile(
+            url: URL(string: sumsURL)!, filePattern: ubuntuPattern, index: listingIndex))
+
+        XCTAssertEqual(release.version.raw, "26.10")
+        XCTAssertEqual(release.fileName, "ubuntu-26.10-desktop-amd64.iso")
+        XCTAssertEqual(release.isoURL?.absoluteString,
+                       "https://releases.example/26.10/ubuntu-26.10-desktop-amd64.iso")
+        XCTAssertTrue(release.isVerifiable)
+        XCTAssertEqual(http.requestedGETs.map(\.absoluteString),
+                       ["https://releases.example/", "https://releases.example/26.10/SHA256SUMS"])
+    }
+
+    func testDirectoryListingIndexIgnoresPointReleaseDirectories() async throws {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", fixture: "ubuntu-releases-listing.html")
+        let targets = try await ChecksumFileProvider(http: http).resolveTargets(
+            base: URL(string: sumsURL)!, index: listingIndex, http: http, limit: 10)
+
+        XCTAssertEqual(targets.map(\.absoluteString), [
+            "https://releases.example/26.10/SHA256SUMS", "https://releases.example/26.04/SHA256SUMS",
+            "https://releases.example/25.10/SHA256SUMS", "https://releases.example/24.04/SHA256SUMS",
+            "https://releases.example/22.04/SHA256SUMS", "https://releases.example/14.04/SHA256SUMS"])
+    }
+
+    /// A series directory that exists but only holds beta images (no filename
+    /// matches the final-ISO pattern) falls back to the previous series.
+    func testABetaOnlyNewestSeriesFallsBackToTheOneBefore() async throws {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", fixture: "ubuntu-releases-listing.html")
+        http.stub("https://releases.example/26.10/SHA256SUMS", fixture: "ubuntu-26.10-beta-only-SHA256SUMS.txt")
+        http.stub("https://releases.example/26.04/SHA256SUMS", fixture: "ubuntu-SHA256SUMS.txt")
+        let release = try await ChecksumFileProvider(http: http).fetchLatest(config: .checksumFile(
+            url: URL(string: sumsURL)!, filePattern: ubuntuPattern, index: listingIndex))
+
+        XCTAssertEqual(release.version.raw, "24.04.4")
+        XCTAssertEqual(release.isoURL?.absoluteString,
+                       "https://releases.example/26.04/ubuntu-24.04.4-desktop-amd64.iso")
+        XCTAssertEqual(http.requestedGETs.map(\.absoluteString), [
+            "https://releases.example/", "https://releases.example/26.10/SHA256SUMS",
+            "https://releases.example/26.04/SHA256SUMS"])
+    }
+
+    /// A flavour whose newest series directory exists in the listing but has no
+    /// `release/` sums yet (404) falls back to the previous series.
+    func testANewestSeriesDirectoryWithoutSumsFallsBackToTheOneBefore() async throws {
+        let http = MockHTTPClient()
+        http.stub("https://releases.example/", fixture: "ubuntu-releases-listing.html")
+        // 26.10 is not stubbed, so the mock answers 404.
+        http.stub("https://releases.example/26.04/SHA256SUMS", fixture: "ubuntu-SHA256SUMS.txt")
+        let release = try await ChecksumFileProvider(http: http).fetchLatest(config: .checksumFile(
+            url: URL(string: sumsURL)!, filePattern: ubuntuPattern, index: listingIndex))
+
+        XCTAssertEqual(release.version.raw, "24.04.4")
+        XCTAssertTrue(release.isVerifiable)
+    }
+
     /// Parrot 7.4 shipped a hash file with MD5s only. The newest release with a
     /// SHA-256 is offered rather than nothing, and never the unverifiable one.
     func testANewestSeriesWithoutSHA256FallsBackToTheOneBefore() async throws {

@@ -1,0 +1,2 @@
+733569320adee426accac397f451c26dd0a8521cc09ba03f4e8d0a35e6b3f101 *ubuntu-26.10-beta-desktop-amd64.iso
+f677abab44bc4e9b8645edee8b3082e07462f5e0b0d9b3a2e9a7f1c4d5e6a202 *ubuntu-26.10-beta-live-server-amd64.iso
