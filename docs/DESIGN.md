@@ -122,7 +122,7 @@ Four implementations mapping to PRD §5 (`ChecksumFileProvider`, `GitHubReleases
 **Built-in catalog wiring (all use the generic providers):**
 | Entry | Mechanism |
 |---|---|
-| Ubuntu Desktop (LTS/Latest) | checksumFile on `releases.ubuntu.com/<series>/SHA256SUMS`; series resolved from `changelogs.ubuntu.com/meta-release` |
+| Ubuntu Desktop (LTS/Latest) | checksumFile on `releases.ubuntu.com/<series>/SHA256SUMS`; the LTS series is resolved from `changelogs.ubuntu.com/meta-release-lts`, the Latest series from the directory listing the sums live under (`releases.ubuntu.com/` here, `cdimage.ubuntu.com/<flavour>/releases/` for the flavours; plain `NN.NN/` directories only; the non-LTS `meta-release` feed lagged and skipped 26.10). For both channels the three newest series are tried in turn, so one with only beta images or no sums falls back to the one before |
 | Fedora Workstation | Fedora's `releases.json` endpoint (small dedicated parser, same protocol) |
 | Debian netinst/DVD | checksumFile on `cdimage.debian.org/debian-cd/current/...SHA256SUMS` |
 | Arch | `archlinux.org/releng/releases/json/` |

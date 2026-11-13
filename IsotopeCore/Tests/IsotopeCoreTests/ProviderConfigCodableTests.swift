@@ -140,6 +140,63 @@ final class ProviderConfigCodableTests: XCTestCase {
         }
     }
 
+    private func bundledCatalog() throws -> [CatalogEntry] {
+        let catalog = URL(fileURLWithPath: #filePath)
+            .deletingLastPathComponent()   // IsotopeCoreTests
+            .deletingLastPathComponent()   // Tests
+            .deletingLastPathComponent()   // IsotopeCore
+            .deletingLastPathComponent()   // repo root
+            .appendingPathComponent("Isotope/Resources/catalog.json")
+        return try JSONStore.loadJSON([CatalogEntry].self, from: Data(contentsOf: catalog))
+    }
+
+    /// Ubuntu's non-LTS `meta-release` feed lags (it still ended at 26.04.1
+    /// after 26.10 shipped), so only the LTS channels may read a changelogs
+    /// feed. The "latest" channels discover versions from the release directory.
+    func testNoUbuntuChannelDependsOnTheNonLTSMetaReleaseFeed() throws {
+        var checked = 0
+        for entry in try bundledCatalog() {
+            for channel in entry.channels {
+                guard case .checksumFile(_, _, let index?, _) = channel.provider else { continue }
+                XCTAssertNotEqual(index.url.absoluteString, "https://changelogs.ubuntu.com/meta-release",
+                                  "\(entry.id)/\(channel.id) still reads the non-LTS meta-release feed")
+                if channel.id == "latest", index.target.contains("ubuntu.com/") {
+                    checked += 1
+                    // The listing sits directly above the series directories.
+                    XCTAssertEqual(index.target.components(separatedBy: "{version}").first, index.url.absoluteString,
+                                   "\(entry.id)/latest should list the directory its target lives under")
+                    XCTAssertEqual(index.pattern, #"href="(\d+\.\d+)/""#)
+                }
+            }
+        }
+        XCTAssertEqual(checked, 11, "expected the 11 Ubuntu-family latest channels")
+    }
+
+    /// Runs the shipped Ubuntu Desktop and Ubuntu Server "latest" configs against
+    /// listings shaped like the real ones: 26.10 wins over 26.04.1 and 26.04.
+    func testBundledUbuntuLatestChannelsResolveTheNewestSeries() async throws {
+        let entries = try bundledCatalog()
+        let cases: [(id: String, listing: String, sums: String, sumsFixture: String, file: String)] = [
+            ("ubuntu-desktop", "https://releases.ubuntu.com/",
+             "https://releases.ubuntu.com/26.10/SHA256SUMS", "ubuntu-26.10-SHA256SUMS.txt",
+             "ubuntu-26.10-desktop-amd64.iso"),
+            ("ubuntu-server", "https://releases.ubuntu.com/",
+             "https://releases.ubuntu.com/26.10/SHA256SUMS", "ubuntu-26.10-SHA256SUMS.txt",
+             "ubuntu-26.10-live-server-amd64.iso"),
+        ]
+        for testCase in cases {
+            let channel = try XCTUnwrap(entries.first { $0.id == testCase.id }?
+                .channels.first { $0.id == "latest" })
+            let http = MockHTTPClient()
+            http.stub(testCase.listing, fixture: "ubuntu-releases-listing.html")
+            http.stub(testCase.sums, fixture: testCase.sumsFixture)
+            let release = try await ChecksumFileProvider(http: http).fetchLatest(config: channel.provider)
+            XCTAssertEqual(release.version.raw, "26.10", testCase.id)
+            XCTAssertEqual(release.fileName, testCase.file, testCase.id)
+            XCTAssertTrue(release.isVerifiable, testCase.id)
+        }
+    }
+
     func testUnknownMechanismFailsLoudly() {
         let json = #"{"mechanism":"torrent","url":"https://example.org/x.iso"}"#
         XCTAssertThrowsError(try JSONStore.makeDecoder().decode(ProviderConfig.self, from: Data(json.utf8)))
