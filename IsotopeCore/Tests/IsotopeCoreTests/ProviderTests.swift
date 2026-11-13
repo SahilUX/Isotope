@@ -527,3 +527,59 @@ final class VersionResolverTests: XCTestCase {
         XCTAssertEqual(Set(pairs.map { $0.0.mechanism }), Set(ProviderConfig.Mechanism.allCases))
     }
 }
+
+/// The bundled GhostBSD channel against its real listing shapes. GhostBSD moved
+/// from `GhostBSD-25.02-R14.2p2.iso` to `GhostBSD-26.3.R15.1p6.iso` (the dot
+/// replaces the dash after the version); the unsuffixed (MATE) edition is the
+/// one the entry means, so `-XFCE` must never be picked.
+final class GhostBSDCatalogScrapeTests: XCTestCase {
+    private let pageURL = URL(string: "https://download.ghostbsd.org/releases/amd64/latest/")!
+
+    private func bundledConfig() throws -> ProviderConfig {
+        let entry = try XCTUnwrap(ContentProbeTests.bundledCatalog().first { $0.id == "ghostbsd" })
+        return try XCTUnwrap(entry.channels.first).provider
+    }
+
+    private func listing(_ names: [String]) -> String {
+        "<html><head><title>Index of /releases/amd64/latest</title></head><body><pre>\n"
+            + names.map { "<a href=\"\($0)\">\($0)</a>" }.joined(separator: "\n")
+            + "\n</pre></body></html>"
+    }
+
+    func testResolvesDefaultEditionNotXFCEWithSidecarHash() async throws {
+        let digest = "2d1b46e7d0d9339ef04d2ee386783a2431f43eecb873b8f11b7109a43c577f7f"
+        let http = MockHTTPClient()
+        http.stub(pageURL.absoluteString, text: listing([
+            "GhostBSD-26.3.R15.1p6-XFCE.iso", "GhostBSD-26.3.R15.1p6-XFCE.iso.sha256",
+            "GhostBSD-26.3.R15.1p6-XFCE.iso.torrent",
+            "GhostBSD-26.3.R15.1p6.iso", "GhostBSD-26.3.R15.1p6.iso.sha256",
+            "GhostBSD-26.3.R15.1p6.iso.torrent",
+        ]))
+        http.stub(pageURL.absoluteString + "GhostBSD-26.3.R15.1p6.iso.sha256",
+                  text: "SHA256 (GhostBSD-26.3.R15.1p6.iso) = \(digest)\n")
+        let release = try await PageScrapeProvider(http: http).fetchLatest(config: bundledConfig())
+
+        XCTAssertEqual(release.fileName, "GhostBSD-26.3.R15.1p6.iso")
+        XCTAssertEqual(release.version.raw, "26.3")
+        XCTAssertEqual(release.isoURL?.absoluteString, pageURL.absoluteString + "GhostBSD-26.3.R15.1p6.iso")
+        XCTAssertEqual(release.sha256, digest)
+    }
+
+    func testStillAcceptsOldDashNamingAndPicksNewest() async throws {
+        let http = MockHTTPClient()
+        http.stub(pageURL.absoluteString, text: listing([
+            "GhostBSD-24.10-R14.1p1.iso", "GhostBSD-25.02-R14.2p2.iso",
+            "GhostBSD-25.02-R14.2p2-XFCE.iso", "GhostBSD-25.02-R14.2p2.iso.sha256",
+        ]))
+        let release = try await PageScrapeProvider(http: http).fetchLatest(config: bundledConfig())
+        XCTAssertEqual(release.fileName, "GhostBSD-25.02-R14.2p2.iso")
+        XCTAssertEqual(release.version.raw, "25.02")
+    }
+
+    func testVolumeLabelPatternMatchesGhostBSDLabels() throws {
+        let entry = try XCTUnwrap(ContentProbeTests.bundledCatalog().first { $0.id == "ghostbsd" })
+        let pattern = try PatternMatcher(XCTUnwrap(entry.volumeLabelPattern))
+        XCTAssertNotNil(pattern.firstMatch(in: "GhostBSD"))
+        XCTAssertNotNil(pattern.firstMatch(in: "GhostBSD 26.3"))
+    }
+}
