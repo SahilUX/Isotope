@@ -12,8 +12,13 @@ struct IsotopeApp: App {
     /// `applicationShouldTerminate` — SwiftUI has no equivalent hook.
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
+    /// Production, or throwaway folders and no outside reach under XCTest.
+    private let launch: LaunchEnvironment
+
     init() {
-        let store = AppStore()
+        let launch = LaunchEnvironment.current
+        self.launch = launch
+        let store = AppStore(locations: launch.storeLocations)
         _store = State(initialValue: store)
         _monitor = State(initialValue: DriveMonitor(store: store))
     }
@@ -26,13 +31,15 @@ struct IsotopeApp: App {
                 .task {
                     appDelegate.store = store
                     await store.loadAtLaunch()
-                    store.startPipeline()
-                    installNotificationRouting()
+                    store.startPipeline(cacheLocations: launch.cacheLocations)
+                    if launch.routesNotifications { installNotificationRouting() }
                     // Volumes first: a drive that is already plugged in should be
                     // connected and scanned before the catalog sweep lands (F3/F7).
-                    monitor.start()
-                    store.startPeriodicRefresh()
-                    await store.refreshCatalog()   // launch trigger (PRD F12)
+                    if launch.startsDriveMonitor { monitor.start() }
+                    if launch.startsPeriodicRefresh { store.startPeriodicRefresh() }
+                    if launch.refreshesCatalogAtLaunch {
+                        await store.refreshCatalog()   // launch trigger (PRD F12)
+                    }
                 }
         }
         // The minimum size is declared per column (sidebar in `RootView`, detail
