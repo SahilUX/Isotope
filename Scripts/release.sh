@@ -36,6 +36,12 @@ drive_busy() {
     echo "error: lsof failed (exit $rc); cannot tell whether Isotope is writing to a drive" >&2
     return 0
   fi
+  # A running Isotope always has rows (cwd, its executable), so an empty list
+  # while it runs means the lookup failed even though lsof exited 1.
+  if [ -z "$open" ] && pgrep -x Isotope >/dev/null; then
+    echo "error: lsof listed nothing for a running Isotope; cannot tell whether it is writing to a drive" >&2
+    return 0
+  fi
   if printf '%s\n' "$open" | grep -E ' /dev/r?disk| /Volumes/' >/dev/null; then
     echo "error: Isotope has a disk or a file on a mounted volume open" >&2
     return 0
