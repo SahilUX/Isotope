@@ -52,10 +52,18 @@ drive_busy() {
     echo "error: Isotope has a disk or a file on a mounted volume open" >&2
     return 0
   fi
-  if pgrep -x diskutil >/dev/null || pgrep -x authopen >/dev/null; then
-    echo "error: diskutil or authopen is running" >&2
-    return 0
-  fi
+  local name
+  for name in diskutil authopen; do
+    prc=0
+    pgrep -x "$name" >/dev/null 2>&1 || prc=$?
+    if [ "$prc" -eq 0 ]; then
+      echo "error: $name is running" >&2
+      return 0
+    elif [ "$prc" -gt 1 ]; then
+      echo "error: pgrep failed (exit $prc); cannot tell whether $name is running" >&2
+      return 0
+    fi
+  done
   return 1
 }
 
@@ -104,11 +112,12 @@ else
   echo "warning: no notarytool profile \"$PROFILE\"; the build is signed but not notarized" >&2
 fi
 
+# Unconditional on purpose: a failed pgrep must not skip the check.
+if drive_busy; then
+  echo "Not installing: Isotope may be writing to a drive. The build is at $APP; run this script again when the app is idle." >&2
+  exit 75
+fi
 if pgrep -x Isotope >/dev/null; then
-  if drive_busy; then
-    echo "Not installing: Isotope may be writing to a drive. The build is at $APP; run this script again when the app is idle." >&2
-    exit 75
-  fi
   osascript -e 'quit app "Isotope"'
   while pgrep -x Isotope >/dev/null; do sleep 0.5; done
 fi
