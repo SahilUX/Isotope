@@ -10,8 +10,16 @@ final class UpdateEngineTests: XCTestCase {
     private var root: URL!
     private var volume: URL!
     private var cacheDir: URL!
+    /// A private defaults suite, so no test here reads or writes the installed
+    /// app's real preferences (a hosted run shares its domain).
+    private var defaultsName: String!
+
+    private var settings: AppSettings {
+        AppSettings(defaults: UserDefaults(suiteName: defaultsName)!)
+    }
 
     override func setUpWithError() throws {
+        defaultsName = "IsotopeUpdateTests-\(UUID().uuidString)"
         root = URL(fileURLWithPath: NSTemporaryDirectory())
             .appendingPathComponent("IsotopeUpdateTests-\(UUID().uuidString)")
         volume = root.appendingPathComponent("VENTOY", isDirectory: true)
@@ -21,6 +29,7 @@ final class UpdateEngineTests: XCTestCase {
     }
 
     override func tearDownWithError() throws {
+        UserDefaults.standard.removePersistentDomain(forName: defaultsName)
         try? FileManager.default.removeItem(at: root)
     }
 
@@ -44,7 +53,7 @@ final class UpdateEngineTests: XCTestCase {
                              installedSize: Int = 64 * 1024,
                              provider behaviour: FakeISOProvider.Behaviour? = nil) async throws -> Fixture {
         let store = AppStore(locations: StoreLocations(root: root.appendingPathComponent("state")),
-                             catalogResourceURL: nil)
+                             catalogResourceURL: nil, settings: settings)
         let volumePath = volume.path
         store.driveProbe = DriveProbe(
             info: { url in
@@ -115,8 +124,6 @@ final class UpdateEngineTests: XCTestCase {
     func testLocalCopyKeepsSourceAndTrackedImageWithoutDownloading() async throws {
         let installed = InstalledISO(fileName: "existing.iso", version: .parse("1"), placedByApp: true)
         let fixture = try await makeFixture(installed: installed)
-        let previous = fixture.store.settings.trashManualSourceAfterPlacement
-        defer { fixture.store.settings.trashManualSourceAfterPlacement = previous }
         fixture.store.settings.trashManualSourceAfterPlacement = true
         let source = try TestFiles.write(root.appendingPathComponent("notes.txt"), size: 4096)
         let original = try Data(contentsOf: source)
@@ -306,7 +313,7 @@ final class UpdateEngineTests: XCTestCase {
 
         // And it survives a relaunch.
         let reloaded = AppStore(locations: StoreLocations(root: root.appendingPathComponent("state")),
-                                catalogResourceURL: nil)
+                                catalogResourceURL: nil, settings: settings)
         await reloaded.loadAtLaunch()
         XCTAssertEqual(reloaded.drives.first?.assignments.map(\.updatePolicy),
                        [.trackLatest, .keepAsIs])
