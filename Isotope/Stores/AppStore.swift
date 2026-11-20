@@ -89,8 +89,10 @@ final class AppStore {
     let settings: AppSettings
     /// PRD F16 / DESIGN §4.6. Defaults to the real notification centre in the
     /// app and to a recorder wherever `UNUserNotificationCenter` is unusable
-    /// (test bundles have no bundle identifier and would trap).
-    var notifications: NotificationPosting = UserNotificationService.isAvailable
+    /// (test bundles have no bundle identifier and would trap) or the process
+    /// is a test host, whose bundle identifier is the real app's.
+    var notifications: NotificationPosting =
+        UserNotificationService.isAvailable && !LaunchEnvironment.isRunningUnderTest
         ? UserNotificationService() : RecordingNotificationService()
     /// Wired at launch by `IsotopeApp`; nil in tests that never update anything.
     var updateEngine: UpdateEngine?

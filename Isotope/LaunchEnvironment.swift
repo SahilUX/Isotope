@@ -17,6 +17,11 @@ struct LaunchEnvironment {
     /// Set by the test runner in every process it hosts tests in.
     static let testVariables = ["XCTestConfigurationFilePath", "XCTestBundlePath"]
 
+    /// True when the environment says the process was started by XCTest.
+    static func isTestRun(in environment: [String: String]) -> Bool {
+        testVariables.contains { !(environment[$0] ?? "").isEmpty }
+    }
+
     let isTestRun: Bool
     let storeLocations: StoreLocations
     let cacheLocations: CacheLocations
@@ -25,7 +30,7 @@ struct LaunchEnvironment {
          temporaryDirectory: URL = FileManager.default.temporaryDirectory,
          productionStore: () -> StoreLocations = { .applicationSupport() },
          productionCache: () -> CacheLocations = { .userCaches() }) {
-        let isTestRun = Self.testVariables.contains { !(environment[$0] ?? "").isEmpty }
+        let isTestRun = Self.isTestRun(in: environment)
         self.isTestRun = isTestRun
         if isTestRun {
             // A fresh folder per launch: tests never see each other's state.
@@ -37,6 +42,11 @@ struct LaunchEnvironment {
             storeLocations = productionStore()
             cacheLocations = productionCache()
         }
+    }
+
+    /// Whether the running process is a test host.
+    static var isRunningUnderTest: Bool {
+        isTestRun(in: ProcessInfo.processInfo.environment)
     }
 
     /// The running process.
