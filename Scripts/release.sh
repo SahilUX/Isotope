@@ -38,7 +38,13 @@ drive_busy() {
   fi
   # A running Isotope always has rows (cwd, its executable), so an empty list
   # while it runs means the lookup failed even though lsof exited 1.
-  if [ -z "$open" ] && pgrep -x Isotope >/dev/null; then
+  local prc=0
+  pgrep -x Isotope >/dev/null 2>&1 || prc=$?
+  if [ "$prc" -gt 1 ]; then
+    echo "error: pgrep failed (exit $prc); cannot tell whether Isotope is running" >&2
+    return 0
+  fi
+  if [ -z "$open" ] && [ "$prc" -eq 0 ]; then
     echo "error: lsof listed nothing for a running Isotope; cannot tell whether it is writing to a drive" >&2
     return 0
   fi
