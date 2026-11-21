@@ -44,9 +44,9 @@ After the tests pass and the review approves, bump the version as one commit tha
 
 ## How the lead is triggered
 
-Two T3 scheduled tasks in the Isotope project on this Mac start the lead:
+Two T3 scheduled tasks in the Isotope project on this Mac start the lead. There are no Plane webhook or event runs. The weekly checks of Sahil's leads are staggered by day: Sun Makeable, Mon Meterkat, Tue Rummage, Wed Suede Cam, Fri Isotope, Sat Family Tree.
 
-- "Isotope lead: weekly check", Wednesdays at 09:00 Dubai. It checks usage, runs `Scripts/verify-catalog.sh`, triages Intake (Scout's items only after the Verifier's comment), and takes at most two accepted items to Done. Anything that needs Sahil is a Plane item with `needs-sahil`; the run's T3 thread gets a warning sign in its title and is left unsettled, so it stays visible and points at those items.
-- "Isotope lead: Plane events", a webhook task. Plane's webhook calls it on Intake and comment events; the task filters to the Isotope project and ignores the lead's own activity. Deliveries within five minutes coalesce into one run. The webhook URL is a secret and lives in the owner-only file `~/.config/plane/isotope-webhook.url`, never in the repo. The task stays disabled until the Plane webhook is added and enabled.
+- "Isotope lead: daily replies", 07:40 Dubai every day except Friday. It only talks in Plane (replies, accept or decline recorded in Lead notes, Scout triage comments after the Verifier) and passes work to the weekly check through the "For the weekly check (Friday)" list in Lead notes. See Each run in `AGENTS.md` for what it must not do.
+- "Isotope lead: weekly check", Fridays at 09:00 Dubai. It starts with that list, checks usage, runs `Scripts/verify-catalog.sh`, triages Intake (Scout's items only after the Verifier's comment), and takes at most two accepted items to Done. Anything that needs Sahil is a Plane item with `needs-sahil`; the run's T3 thread gets a warning sign in its title and is left unsettled, so it stays visible and points at those items.
 
 The lead's Plane account is `isotope-lead`, a Contributor on the Isotope project only. Its token is in `~/.config/plane/isotope-lead.token` and reaches the `plane-lead` MCP in `.mcp.json`, a local stdio server started as `~/.local/bin/plane-lead-mcp isotope-lead` (a wrapper around `plane-mcp-server` that reads that token). The hosted Plane endpoint is not used: it answers `401 invalid_token` for valid keys under rate limiting, and a 401 at connect leaves the session with no Plane tools.
