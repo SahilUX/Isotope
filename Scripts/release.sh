@@ -19,6 +19,59 @@ TEAM_ID="627Y9R25T5"
 IDENTITY="Developer ID Application"
 PROFILE="${NOTARY_PROFILE:-isotope-notary}"
 
+# Quitting the app mid-flash or mid-copy can leave a drive half written, and
+# nothing in the app protects against it. Refuse to go on while Isotope holds
+# a raw disk or a file on a mounted volume open, or while diskutil or authopen
+# runs. `authopen` exits once it has handed over the descriptor, so the lsof
+# check is what sees a flash; the process checks catch the moments around it.
+# The script runs this twice: first thing, so a busy drive costs no build, and
+# again right before the quit, because the build takes minutes.
+drive_busy() {
+  command -v lsof >/dev/null 2>&1 || { echo "error: lsof not found; cannot tell whether Isotope is writing to a drive" >&2; return 0; }
+  # lsof exits 1 when it finds nothing. Anything else is a failed lookup, which
+  # must not read as "clear", so treat that as busy too.
+  local open rc=0
+  open=$(lsof -c Isotope 2>/dev/null) || rc=$?
+  if [ "$rc" -gt 1 ]; then
+    echo "error: lsof failed (exit $rc); cannot tell whether Isotope is writing to a drive" >&2
+    return 0
+  fi
+  # A running Isotope always has rows (cwd, its executable), so an empty list
+  # while it runs means the lookup failed even though lsof exited 1.
+  local prc=0
+  pgrep -x Isotope >/dev/null 2>&1 || prc=$?
+  if [ "$prc" -gt 1 ]; then
+    echo "error: pgrep failed (exit $prc); cannot tell whether Isotope is running" >&2
+    return 0
+  fi
+  if [ -z "$open" ] && [ "$prc" -eq 0 ]; then
+    echo "error: lsof listed nothing for a running Isotope; cannot tell whether it is writing to a drive" >&2
+    return 0
+  fi
+  if printf '%s\n' "$open" | grep -E ' /dev/r?disk| /Volumes/' >/dev/null; then
+    echo "error: Isotope has a disk or a file on a mounted volume open" >&2
+    return 0
+  fi
+  local name
+  for name in diskutil authopen; do
+    prc=0
+    pgrep -x "$name" >/dev/null 2>&1 || prc=$?
+    if [ "$prc" -eq 0 ]; then
+      echo "error: $name is running" >&2
+      return 0
+    elif [ "$prc" -gt 1 ]; then
+      echo "error: pgrep failed (exit $prc); cannot tell whether $name is running" >&2
+      return 0
+    fi
+  done
+  return 1
+}
+
+if drive_busy; then
+  echo "Not releasing: Isotope may be writing to a drive. Try again when it is idle." >&2
+  exit 75
+fi
+
 xcodegen generate >/dev/null
 
 SIGNING=(
@@ -59,6 +112,11 @@ else
   echo "warning: no notarytool profile \"$PROFILE\"; the build is signed but not notarized" >&2
 fi
 
+# Unconditional on purpose: a failed pgrep must not skip the check.
+if drive_busy; then
+  echo "Not installing: Isotope may be writing to a drive. The build is at $APP; run this script again when the app is idle." >&2
+  exit 75
+fi
 if pgrep -x Isotope >/dev/null; then
   osascript -e 'quit app "Isotope"'
   while pgrep -x Isotope >/dev/null; do sleep 0.5; done
