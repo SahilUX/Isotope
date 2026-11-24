@@ -1,9 +1,14 @@
 {
   "mcpServers": {
-    "plane-lead": {
+    "erp-lead": {
       "type": "stdio",
-      "command": "${HOME}/.local/bin/plane-lead-mcp",
+      "command": "${HOME}/.local/bin/erp-mcp",
       "args": ["isotope-lead"]
+    },
+    "erp-scout": {
+      "type": "stdio",
+      "command": "${HOME}/.local/bin/erp-mcp",
+      "args": ["isotope-scout"]
     }
   }
 }
