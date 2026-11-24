@@ -15,12 +15,12 @@ Task: <one paragraph: what to change and why>
 - Add or update a test for any behaviour you change. Keep IsotopeCore free of SwiftUI, AppKit, CryptoKit and DiskArbitration.
 - Catalog work: run `Scripts/verify-catalog.sh` and report each channel it flags.
 
-Never touch a real USB device, never launch or drive /Applications/Isotope.app, and never read or write ~/Library/Application Support/Isotope or ~/Library/Caches/Isotope (the app-layer suite's own rewrite of release-cache.json is the one known exception). Tests use fakes and temporary directories. Don't commit, push, open a PR, or use Plane; the lead does that. Change nothing outside the task, and don't change the version.
+Never touch a real USB device, never launch or drive /Applications/Isotope.app, and never read or write ~/Library/Application Support/Isotope or ~/Library/Caches/Isotope (the app-layer suite's own rewrite of release-cache.json is the one known exception). Tests use fakes and temporary directories. Don't commit, push, open a PR, or use ERPNext; the lead does that. Change nothing outside the task, and don't change the version.
 
 Finish with a short report: files changed, test results, anything you were unsure about. For UI work, list the views to look at.
 ```
 
-Workers are Claude subagents (Agent tool, run in the foreground). A tester worker's brief names the behaviour to check and the test files to extend. It reports bugs to the lead, which files them in Plane Intake.
+Workers are Claude subagents (Agent tool, run in the foreground). A tester worker's brief names the behaviour to check and the test files to extend. It reports bugs to the lead, which files them as Intake tasks in ERPNext.
 
 ## Review
 
@@ -31,7 +31,7 @@ You are an outside reviewer for the Isotope repo, a macOS app that writes ISO fi
 
 Check correctness: bugs, missing failure cases, claims that don't match the repo (paths, commands, hooks, how it builds, tests or ships), contradictions with AGENTS.md, and rules that would mislead an agent. For code, also check: nothing unverified reaches a drive; a delete or flash can't hit the wrong file or device; IsotopeCore imports only Foundation; no new dependency; tests are offline and use fakes; old drives.json, history.json and custom-sources.json still load; README counts and figures match; no secret, token, personal path or private address in the diff. Skip style nits.
 
-Don't edit files, run the app or the app-layer tests, touch any drive or ~/Library/*/Isotope, use Plane, or comment on or approve the PR with `gh`. Reply with exactly one first line, `VERDICT: APPROVE` or `VERDICT: CHANGES`, then a numbered list of findings, each with file:line, what is wrong, and the fix. APPROVE means nothing must change before merge; list optional suggestions separately under "Optional".
+Don't edit files, run the app or the app-layer tests, touch any drive or ~/Library/*/Isotope, use ERPNext, or comment on or approve the PR with `gh`. Reply with exactly one first line, `VERDICT: APPROVE` or `VERDICT: CHANGES`, then a numbered list of findings, each with file:line, what is wrong, and the fix. APPROVE means nothing must change before merge; list optional suggestions separately under "Optional".
 
 DIFF:
 ```
@@ -44,9 +44,10 @@ After the tests pass and the review approves, bump the version as one commit tha
 
 ## How the lead is triggered
 
-Two T3 scheduled tasks in the Isotope project on this Mac start the lead. There are no Plane webhook or event runs. The weekly checks of Sahil's leads are staggered by day: Sun Makeable, Mon Meterkat, Tue Rummage, Wed Suede Cam, Fri Isotope, Sat Family Tree.
+Three T3 scheduled tasks in the Isotope project start the lead. The weekly checks of Sahil's leads are staggered by day: Sun Makeable, Mon Meterkat, Tue Rummage, Wed Suede Cam, Fri Isotope, Sat Family Tree. Scout's weekly research run for Isotope is on Wednesdays at 08:00, before the Friday check.
 
-- "Isotope lead: daily replies", 07:40 Dubai every day except Friday. It only talks in Plane (replies, accept or decline recorded in Lead notes, Scout triage comments after the Verifier) and passes work to the weekly check through the "For the weekly check (Friday)" list in Lead notes. See Each run in `AGENTS.md` for what it must not do.
-- "Isotope lead: weekly check", Fridays at 09:00 Dubai. It starts with that list, checks usage, runs `Scripts/verify-catalog.sh`, triages Intake (Scout's items only after the Verifier's comment), and takes at most two accepted items to Done. Anything that needs Sahil is a Plane item with `needs-sahil`; the run's T3 thread gets a warning sign in its title and is left unsettled, so it stays visible and points at those items.
+- "Isotope lead: event reply": starts when Sahil comments on a task in the Isotope ERPNext project. It reads that task and its comments, replies if Sahil's comment waits on an answer, and settles. It only talks.
+- "Isotope lead: daily replies", 07:40 Dubai every day except Friday. It only talks in ERPNext (replies, the Verifier-based comments on Scout's tasks) and passes work to the weekly check through the "For the weekly check (Friday)" list in Lead notes. See Each run in `AGENTS.md` for what it must not do.
+- "Isotope lead: weekly check", Fridays at 09:00 Dubai. It starts with that list, checks usage, runs `Scripts/verify-catalog.sh`, triages Intake (Scout's tasks only after the Verifier's comment), and takes every ready task the usage guard allows to `Completed`, highest priority first. Anything that needs Sahil is a task comment with `needs_sahil` checked; the run's T3 thread gets a warning sign in its title and is left unsettled, so it stays visible and points at those tasks.
 
-The lead's Plane account is `isotope-lead`, a Contributor on the Isotope project only. Its token is in `~/.config/plane/isotope-lead.token` and reaches the `plane-lead` MCP in `.mcp.json`, a local stdio server started as `~/.local/bin/plane-lead-mcp isotope-lead` (a wrapper around `plane-mcp-server` that reads that token). The hosted Plane endpoint is not used: it answers `401 invalid_token` for valid keys under rate limiting, and a 401 at connect leaves the session with no Plane tools.
+The lead's ERPNext user is `isotope-lead`, pinned to the Isotope project. It reaches ERPNext through the `erp-lead` MCP in `.mcp.json`, a local stdio server started as `~/.local/bin/erp-mcp isotope-lead`; Scout uses `erp-scout` the same way. Load the `erp-work` skill before touching a task.
