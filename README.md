@@ -1,6 +1,6 @@
 # Isotope
 
-**Alpha.** The shape is settled and the internals are covered by tests, but this has had one pair of eyes on it, ships no notarised build, and its catalog is only as current as the last `verify-catalog.sh` run. Read [Alpha status](#alpha-status) before pointing it at a drive you care about.
+**Production.** Isotope's behaviour and the JSON state it keeps no longer break: files an earlier build wrote still load, and formats change only by adding optional fields. It has had one pair of eyes on it, ships no notarised build, and its catalog is only as current as the last `verify-catalog.sh` run. Read [Status](#status) before pointing it at a drive you care about.
 
 A native macOS app that keeps the ISOs on your USB drives up to date.
 
@@ -216,16 +216,16 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ---
 
-## Alpha status
+## Status
 
-Alpha means the shape is settled and the guts are tested. 287 unit tests in `IsotopeCore`, 253 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+The shape is settled and the guts are tested. 287 unit tests in `IsotopeCore`, 253 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 
 - **Flashing erases a whole device.** The safety gates and the naming confirmation are real and tested, but the consequence of a bug here is somebody's disk. Read the device name in the confirmation dialog every time.
 - **The catalog is only as fresh as the last verification run.** Distributions move their URLs without warning. Every entry was live-verified on 2026-08-20; if a source drifts, checks report a failure for that channel rather than a wrong version, and the fix is a `catalog.json` edit plus `Scripts/verify-catalog.sh`.
 - **There is no published notarised build yet.** Build from source; source builds are signed ad-hoc.
-- **No migration promises yet.** State is human-readable JSON under `~/Library/Application Support/Isotope/`, and unknown fields are tolerated, but nothing here is a stability guarantee.
+- **State files stay readable.** State is human-readable JSON under `~/Library/Application Support/Isotope/`. Files from earlier builds load, unknown fields are tolerated, and formats change only by adding optional fields.
 - **Windows build detection has been exercised against synthetic images and real media on one machine.** Unusual media, custom or repacked ISOs, may simply report no build.
 
 The most useful bug report names the drive type, the entry, and what the row said versus what was actually on the stick.
