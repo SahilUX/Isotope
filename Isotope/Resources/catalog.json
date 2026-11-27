@@ -1325,7 +1325,7 @@
     "organization": "Fedora",
     "homepage": "https://fedoraproject.org/",
     "isBuiltIn": true,
-    "volumeLabelPattern": "^Fedora-SB-ostree-x86_64-(\\d+)",
+    "volumeLabelPattern": "^Fedora-(?:SB-ostree-x86_64-(?=\\d)|(?=\\d+-Silverblue-x86_64))(\\d+)",
     "channels": [
       {
         "id": "default",
@@ -1344,7 +1344,7 @@
           "isoURLKey": "link",
           "sha256Key": "sha256",
           "sizeKey": "size",
-          "fileNamePattern": "^Fedora-Silverblue-ostree-x86_64-(\\d+)-[\\d.]+\\.iso$"
+          "fileNamePattern": "^Fedora-Silverblue-(?:ostree-x86_64-|Installer-)(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
         }
       }
     ]
@@ -1356,7 +1356,7 @@
     "organization": "Fedora",
     "homepage": "https://fedoraproject.org/",
     "isBuiltIn": true,
-    "volumeLabelPattern": "^Fedora-Kinoite-ostree-x86_64-(\\d+)",
+    "volumeLabelPattern": "^Fedora-(?:(?:Knt|Kinoite)-ostree-x86_64-(?=\\d)|(?=\\d+-Kinoite-x86_64))(\\d+)",
     "channels": [
       {
         "id": "default",
@@ -1375,7 +1375,7 @@
           "isoURLKey": "link",
           "sha256Key": "sha256",
           "sizeKey": "size",
-          "fileNamePattern": "^Fedora-Kinoite-ostree-x86_64-(\\d+)-[\\d.]+\\.iso$"
+          "fileNamePattern": "^Fedora-Kinoite-(?:ostree-x86_64-|Installer-)(\\d+)-[\\d.]+(?:\\.x86_64)?\\.iso$"
         }
       }
     ]
