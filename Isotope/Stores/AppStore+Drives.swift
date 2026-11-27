@@ -184,6 +184,7 @@ extension AppStore {
         isoSizes[id] = nil
         lastScanAt[id] = nil
         isScanning.remove(id)
+        forgetVentoyVersion(driveID: id)
         if selection == .drive(id) { selection = .drives }
     }
 
@@ -208,6 +209,7 @@ extension AppStore {
         connectedVolumes[volumeUUID] = nil
         for drive in drives where drive.volumeUUID == volumeUUID {
             isScanning.remove(drive.id)
+            forgetVentoyVersion(driveID: drive.id)
         }
     }
 
@@ -259,6 +261,8 @@ extension AppStore {
         // build, so anything newly found here still has to be opened to say
         // which 25H2 it is. Runs on its own, after the scan has settled.
         refreshWindowsBuilds(driveID: driveID)
+        // PRD F74: once per connect, and only while nothing writes to the drive.
+        refreshVentoyVersion(driveID: driveID)
         return result
     }
 
@@ -496,6 +500,8 @@ extension AppStore {
     /// eject, and nothing is being written to it (PRD F23).
     func canEject(_ drive: ManagedDrive) -> Bool {
         guard !hasOperationsInFlight(drive) else { return false }
+        // PRD F74: VTOYEFI may be mounted for a moment while its version is read.
+        guard !isReadingVentoyVersion(drive) else { return false }
         return drive.isFlashed ? attachedDevice(for: drive) != nil : volumeInfo(for: drive) != nil
     }
 
@@ -507,7 +513,7 @@ extension AppStore {
 
     func eject(driveID: UUID) throws {
         guard let drive = drive(id: driveID) else { return }
-        guard !hasOperationsInFlight(drive) else { return }
+        guard !hasOperationsInFlight(drive), !isReadingVentoyVersion(drive) else { return }
         guard let info = volumeInfo(for: drive) else { return }
         try DriveAccess.eject(volumeURL: info.url)
         markDisconnected(volumeUUID: drive.volumeUUID)

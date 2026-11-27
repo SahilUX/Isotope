@@ -58,7 +58,23 @@ final class AppStore {
 
     /// Drives with a download/copy in flight. Phase 4's UpdateEngine owns this
     /// set; Phase 3 only reads it, to keep Eject and Unregister safe (PRD F23).
-    var drivesWithOperationsInFlight: Set<UUID> = []
+    var drivesWithOperationsInFlight: Set<UUID> = [] {
+        // PRD F74: a drive that was busy when it connected has its Ventoy
+        // version read once the pipeline lets go of it.
+        didSet {
+            guard drivesWithOperationsInFlight != oldValue else { return }
+            for drive in drives where !drive.isFlashed { refreshVentoyVersion(driveID: drive.id) }
+        }
+    }
+
+    /// PRD F74: the Ventoy release read from each connected Ventoy drive, in
+    /// memory only (never persisted). Written by AppStore+VentoyVersion.swift.
+    var ventoyVersions: [UUID: VentoyVersionReading] = [:]
+    /// Reads in progress, each with the token of the connect it belongs to.
+    var ventoyVersionReads: [UUID: UUID] = [:]
+    /// Mounts VTOYEFI read-only; never under XCTest, where tests inject a fake.
+    var ventoyVersionReader: VentoyVersionProbing =
+        LaunchEnvironment.isRunningUnderTest ? DisabledVentoyVersionReader() : VentoyVersionReader()
 
     // Flashed drives (PRD §8). Written by `DriveMonitor`'s device watcher and
     // the flash pipeline in AppStore+Flash.swift.

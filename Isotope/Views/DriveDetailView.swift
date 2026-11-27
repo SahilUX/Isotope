@@ -119,6 +119,9 @@ struct DriveDetailView: View {
                         .foregroundStyle(.orange)
                 }
             }
+            if store.ventoyVersion(for: drive)?.needsSecureBootCANotice == true {
+                Section { VentoySecureBootNotice(version: store.ventoyVersion(for: drive)?.version) }
+            }
             Section { DriveHeader(drive: drive, onEject: eject) }
             assignmentsSection(for: drive)
             detectedFilesSection(for: drive)
@@ -331,11 +334,18 @@ private struct DriveHeader: View {
                 Text(drive.displayName).font(.title2.weight(.semibold))
                 Spacer()
                 Button("Eject", systemImage: "eject") { onEject() }
-                    .disabled(info == nil || store.hasOperationsInFlight(drive))
+                    .disabled(info == nil || !store.canEject(drive))
             }
             Text(connectionSummary)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            // PRD F74: which Ventoy is on the stick, once it has been read.
+            if let reading = store.ventoyVersion(for: drive) {
+                Text(ventoySummary(reading))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                    .help(ventoyHelp(reading))
+            }
             capacityBar(info: info)
         }
         .padding(.vertical, 4)
@@ -362,6 +372,17 @@ private struct DriveHeader: View {
         return "\(ByteCountFormatter.string(fromByteCount: free, countStyle: .file)) free of \(total)"
     }
 
+    private func ventoySummary(_ reading: VentoyVersionReading) -> String {
+        reading.version.map { "Ventoy \($0)" } ?? "Ventoy version unknown"
+    }
+
+    private func ventoyHelp(_ reading: VentoyVersionReading) -> String {
+        switch reading {
+        case .known: return "Read from the drive's VTOYEFI partition"
+        case .unknown(let reason): return reason
+        }
+    }
+
     private var connectionSummary: String {
         if store.isConnected(drive) {
             let readOnly = store.volumeInfo(for: drive)?.isReadOnly == true ? " · Read-only" : ""
@@ -369,6 +390,19 @@ private struct DriveHeader: View {
         }
         guard let seen = drive.lastSeenAt else { return "Not connected" }
         return "Not connected · Last seen \(seen.formatted(date: .abbreviated, time: .shortened))"
+    }
+}
+
+// MARK: - Ventoy Secure Boot notice (PRD F74)
+
+private struct VentoySecureBootNotice: View {
+    let version: VentoyVersion?
+
+    var body: some View {
+        Label("Ventoy \(version.map(String.init(describing:)) ?? "") is older than 1.1.14, which uses the old Secure Boot CA and may not boot on PCs that have revoked it. Update Ventoy on this drive with Ventoy2Disk. Isotope does not update Ventoy itself.",
+              systemImage: "exclamationmark.shield.fill")
+            .font(.callout)
+            .foregroundStyle(.orange)
     }
 }
 
