@@ -356,6 +356,22 @@ final class VentoyVersionReaderTests: XCTestCase {
         XCTAssertTrue(mounter.unmounts.isEmpty)
     }
 
+    func testAPartitionMountedInOneOfOurFoldersIsHeldNotReadInPlace() throws {
+        // An earlier read's mount that was never undone: the grub.cfg is right
+        // there, and still it is not read or touched (DESIGN §21).
+        let container = root.appendingPathComponent("isotope-vtoyefi-LEFT", isDirectory: true)
+        let existing = container.appendingPathComponent("m", isDirectory: true)
+        try FileManager.default.createDirectory(at: existing.appendingPathComponent("grub"),
+                                                withIntermediateDirectories: true)
+        try grub.write(to: existing.appendingPathComponent("grub/grub.cfg"), atomically: true, encoding: .utf8)
+        let mounter = FakeMounter()
+        let result = read(FakeDisks(ventoySnapshot(mountPoint: existing)), mounter)
+        XCTAssertNil(result.reading.version)
+        XCTAssertEqual(result.leftoverMount?.standardizedFileURL, container.standardizedFileURL)
+        XCTAssertTrue(mounter.mounts.isEmpty)
+        XCTAssertTrue(mounter.unmounts.isEmpty)
+    }
+
     func testReadsAtMostOneMebibyte() {
         let mounter = FakeMounter()
         mounter.config = grub
@@ -537,6 +553,33 @@ final class VentoyVersionReaderTests: XCTestCase {
         XCTAssertTrue(FileManager.default.fileExists(atPath: mountPoint(stuck).path))
     }
 
+    func testAFailedCleanupNamesTheWholeDiskItsMountIsOn() throws {
+        let stuck = try makeContainer("isotope-vtoyefi-W")
+        let mounter = FakeMounter()
+        mounter.markMounted(mountPoint(stuck))
+        mounter.unmountFailures = -1
+        let janitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
+        XCTAssertEqual(janitor.attemptCleanUp(stuck), VentoyCleanupFailure(container: stuck, wholeDisk: "disk9"))
+
+        // Refused as not ours: nothing is said about any disk.
+        let stranger = try makeContainer("isotope-vtoyefi-X")
+        let other = FakeMounter()
+        other.markMounted(mountPoint(stranger))
+        other.info = { VentoyMountInfo(mountedOn: $0.path, mountedFrom: "/dev/disk9s1", fileSystem: "msdos",
+                                       isReadOnly: true) }
+        XCTAssertEqual(VentoyMountJanitor(mounter: other, temporaryDirectory: root).attemptCleanUp(stranger),
+                       VentoyCleanupFailure(container: stranger, wholeDisk: nil))
+
+        // A disk that is busy keeps its mount, so the disk is named too.
+        let busy = try makeContainer("isotope-vtoyefi-Y")
+        let third = FakeMounter()
+        third.markMounted(mountPoint(busy))
+        var gated = VentoyMountJanitor(mounter: third, temporaryDirectory: root)
+        gated.diskGate = { _, _ in nil }
+        XCTAssertEqual(gated.attemptCleanUp(busy), VentoyCleanupFailure(container: busy, wholeDisk: "disk9"))
+        XCTAssertTrue(third.unmounts.isEmpty)
+    }
+
     func testJanitorLeavesAMountPointThatIsASymlinkAlone() throws {
         let container = root.appendingPathComponent("isotope-vtoyefi-S", isDirectory: true)
         try makePrivateFolder(container)
@@ -613,15 +656,15 @@ final class VentoyVersionReaderTests: XCTestCase {
         }
         let events = GateEvents()
         var janitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
-        janitor.diskGate = { disk in
+        janitor.diskGate = { _, disk in
             events.record("reserve \(disk)")
             guard disk != "disk5" else { return nil }
-            return { events.record("release \(disk)") }
+            return { cleaned in events.record("release \(disk) cleaned: \(cleaned)") }
         }
         XCTAssertFalse(janitor.cleanUp(busy))
         XCTAssertTrue(mounter.unmounts.isEmpty, "a busy disk is not touched")
         XCTAssertTrue(janitor.cleanUp(free))
-        XCTAssertEqual(events.values, ["reserve disk5", "reserve disk9", "release disk9"])
+        XCTAssertEqual(events.values, ["reserve disk5", "reserve disk9", "release disk9 cleaned: true"])
     }
 
     func testPartitionTwoNames() {
@@ -1468,7 +1511,10 @@ final class VentoyVersionStoreTests: XCTestCase {
         await waitUntil { ejected.values == ["disk4"] }
         XCTAssertFalse(store.ventoyStuckHolds.isEmpty, "the eject itself does not drop the hold")
 
-        // The whole disk disappears from the device list: the mount went with it.
+        // The whole disk disappears from the device list: the mount went with
+        // it. One scan without it is not enough, two in a row are.
+        store.attachedDevices = []
+        XCTAssertFalse(store.ventoyStuckHolds.isEmpty, "one scan could be a transient result")
         store.attachedDevices = []
         XCTAssertTrue(store.ventoyStuckHolds.isEmpty)
         XCTAssertFalse(store.isVentoyReadUnfinished(fixture.flashed))
@@ -1476,15 +1522,78 @@ final class VentoyVersionStoreTests: XCTestCase {
         XCTAssertEqual(wait, .clear)
     }
 
-    func testDisconnectReleasesAnUnfinishedMount() async throws {
+    func testVolumeDisconnectKeepsTheHoldUntilTheDiskIsGone() async throws {
         let fixture = try await abandonedFixture()
         let store = fixture.store
         XCTAssertTrue(store.isVentoyReadUnfinished(fixture.drive))
+        // The volume went away but the stick is still in the device list.
         store.markDisconnected(volumeUUID: "UUID-A")
+        XCTAssertFalse(store.ventoyStuckHolds.isEmpty)
+        XCTAssertTrue(store.isVentoyReadUnfinished(fixture.flashed))
+        store.attachedDevices = []
+        store.attachedDevices = []
         XCTAssertTrue(store.ventoyStuckHolds.isEmpty)
         XCTAssertFalse(store.isVentoyReadUnfinished(fixture.drive))
         // The container is still recorded for the quit and launch janitors.
         XCTAssertEqual(store.ventoyLeftoverMounts, [fixture.container])
+    }
+
+    func testUnregisterAfterAnAbandonedMountKeepsTheHoldAndRefusesAFlashedRegistration() async throws {
+        let fixture = try await abandonedFixture()
+        let store = fixture.store
+        store.unregisterDrive(id: fixture.drive.id)
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1, "the hold belongs to the disk, not the registration")
+        XCTAssertTrue(store.isVentoyReadUnfinished(fixture.flashed))
+        XCTAssertTrue(store.isVentoyReadUnfinished(bsdName: "disk4"))
+
+        let attempt = try flashAttempt(store, flashed: fixture.flashed)
+        let started = Date()
+        await attempt.engine.enqueue(attempt.request)
+        await attempt.engine.drain()
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2, "refused at once, not after the wait limit")
+        XCTAssertEqual(attempt.io.describeCount, 0)
+        XCTAssertTrue(attempt.io.written.isEmpty)
+        let message = try XCTUnwrap(store.operations.first?.errorMessage)
+        XCTAssertTrue(message.contains(AppStore.ventoyReadUnfinished), message)
+    }
+
+    func testATransientEmptyDeviceScanKeepsTheHold() async throws {
+        let fixture = try await abandonedFixture()
+        let store = fixture.store
+        store.attachedDevices = []
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1, "one empty scan is not a removal")
+        XCTAssertTrue(store.isVentoyReadUnfinished(bsdName: "disk4"))
+        // The stick is listed again: the count starts over.
+        store.attachedDevices = [matchingDevice()]
+        store.attachedDevices = []
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1)
+        XCTAssertTrue(store.isVentoyReadUnfinished(bsdName: "disk4"))
+        // A short scan that lists other sticks but not this one counts too.
+        store.attachedDevices = [matchingDevice()]
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1)
+    }
+
+    func testARealRemovalReleasesTheHold() async throws {
+        let fixture = try await abandonedFixture()
+        let store = fixture.store
+        var other = matchingDevice()
+        other.bsdName = "disk7"
+        store.attachedDevices = [other]
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1)
+        store.attachedDevices = [other]
+        XCTAssertTrue(store.ventoyStuckHolds.isEmpty, "gone from two scans in a row")
+        let wait = await store.waitForVentoyVersionReads(driveID: fixture.flashed.id, bsdName: "disk4")
+        XCTAssertEqual(wait, .clear)
+    }
+
+    func testAMissingDiskAsksTheWatcherForASecondScan() async throws {
+        let fixture = try await abandonedFixture()
+        let store = fixture.store
+        store.ventoyRemovalRecheckDelay = 0.05
+        store.rescanDevices = { store.attachedDevices = [] }   // the stick really is gone
+        store.attachedDevices = []
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1)
+        await waitUntil { store.ventoyStuckHolds.isEmpty }
     }
 
     func testFailedUnmountKeepsTheHoldUntilTheJanitorCleansItUp() async throws {
@@ -1516,6 +1625,181 @@ final class VentoyVersionStoreTests: XCTestCase {
         let wait = await store.waitForVentoyVersionReads(driveID: drive.id, isCancelled: { cancelled.isSet })
         XCTAssertEqual(wait, .cancelled)
         XCTAssertLessThan(Date().timeIntervalSince(started), 2, "not the wait limit")
+    }
+
+    // MARK: Failed cleanups and the cleanup reservation (DESIGN §21)
+
+    private struct FlashAttempt {
+        var engine: FlashEngine
+        var io: FakeFlashDeviceIO
+        var request: FlashRequest
+    }
+
+    /// A flash of `flashed` onto disk4 through the real engine, over fakes.
+    private func flashAttempt(_ store: AppStore, flashed: ManagedDrive) throws -> FlashAttempt {
+        let iso = try TestFiles.write(root.appendingPathComponent("arch-\(UUID().uuidString).iso"), size: 64 * 1024)
+        let release = Release(version: VersionToken.parse("2026.08.01")!,
+                              isoURL: URL(string: "https://example.com/arch.iso")!, fileName: "arch.iso",
+                              sha256: nil, sizeBytes: 64 * 1024, checkedAt: Date())
+        let io = FakeFlashDeviceIO(description: FlashDeviceDescription(bsdName: "disk4",
+                                                                       displayName: "SanDisk Cruzer Blade",
+                                                                       sizeBytes: 32 << 30))
+        let engine = FlashEngine(store: store, downloads: FakeISOProvider(behaviour: .file(iso)), io: io,
+                                 hashing: store.hashing)
+        let request = FlashRequest(driveID: flashed.id, driveName: flashed.displayName,
+                                   assignmentID: flashed.assignments[0].id, entryID: "arch",
+                                   channelID: "default", title: "Arch Linux", release: release,
+                                   bsdName: "disk4", deviceName: "SanDisk Cruzer Blade", verifyAfterWrite: false)
+        return FlashAttempt(engine: engine, io: io, request: request)
+    }
+
+    private struct CopyAttempt {
+        var engine: UpdateEngine
+        var writer: FakeDriveWriter
+        var request: UpdateRequest
+        var source: URL
+        var fileName: String
+    }
+
+    /// A manual copy of a small file to `drive`, through the real engine.
+    private func copyAttempt(_ store: AppStore, drive: ManagedDrive) throws -> CopyAttempt {
+        let writer = FakeDriveWriter()
+        let engine = UpdateEngine(store: store,
+                                  downloads: FakeISOProvider(behaviour: .failure(CocoaError(.fileNoSuchFile))),
+                                  drives: writer)
+        store.updateEngine = engine
+        let source = try TestFiles.write(root.appendingPathComponent("notes.txt"), size: 4096)
+        let file = try LocalFile(url: source)
+        let request = UpdateRequest(driveID: drive.id, driveName: "VENTOY", assignmentID: UUID(),
+                                    entryID: "local-file", channelID: "local", title: file.name,
+                                    release: file.release, isLocalFile: true)
+        return CopyAttempt(engine: engine, writer: writer, request: request, source: source, fileName: file.name)
+    }
+
+    private struct CleanupFixture {
+        var store: AppStore
+        var volume: URL
+        var drive: ManagedDrive
+        var flashed: ManagedDrive
+        var container: URL
+        var point: URL
+        var mounter: StubMounter
+    }
+
+    /// A Ventoy drive and a flashed registration of the same stick (disk4),
+    /// and an `isotope-vtoyefi-*` container with a mount the janitor finds.
+    private func cleanupFixture(unmountFails: Bool) async throws -> CleanupFixture {
+        let volume = root.appendingPathComponent("VENTOY", isDirectory: true)
+        try FileManager.default.createDirectory(at: volume, withIntermediateDirectories: true)
+        let store = await makeStore(probe: probe([:]), volumes: [volume: info(volume, uuid: "UUID-V")])
+        store.ventoyVersionReader = DisabledVentoyVersionReader()
+        store.attachedDevices = [device(volumeUUIDs: ["UUID-V"])]
+        let drive = try store.registerDrive(at: volume)
+        var flashed = ManagedDrive(volumeUUID: "", displayName: "SanDisk Cruzer Blade", bookmark: Data(),
+                                   assignments: [Assignment(entryID: "arch", channelID: "default")],
+                                   capacityBytes: 32 << 30, kind: .flashed,
+                                   hardwareID: HardwareID(vendorID: 0x0781, productID: 0x5583,
+                                                          serialNumber: "SERIAL-1"),
+                                   lastBSDName: "disk4")
+        flashed.kind = .flashed
+        store.addDrive(flashed)
+        let container = root.appendingPathComponent("isotope-vtoyefi-J", isDirectory: true)
+        let point = container.appendingPathComponent("m", isDirectory: true)
+        try makePrivateFolder(container)
+        try makePrivateFolder(point)
+        let mounter = StubMounter(mounted: [point], stuck: unmountFails ? [point] : [])
+        store.ventoyMountJanitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
+        return CleanupFixture(store: store, volume: volume, drive: drive, flashed: flashed,
+                              container: container, point: point, mounter: mounter)
+    }
+
+    func testAFailedLaunchCleanupHoldsTheDiskForFlashesAndCopies() async throws {
+        let fixture = try await cleanupFixture(unmountFails: true)
+        let store = fixture.store
+        store.cleanUpLeftoverVentoyMounts()
+        await waitUntil { !store.ventoyStuckHolds.isEmpty && store.ventoyEjectReservations.isEmpty }
+        XCTAssertEqual(store.ventoyStuckHolds[fixture.container]?.wholeDisk, "disk4")
+        XCTAssertEqual(store.ventoyLeftoverMounts, [fixture.container])
+        XCTAssertTrue(store.isVentoyReadUnfinished(fixture.drive))
+        XCTAssertTrue(store.isVentoyReadUnfinished(fixture.flashed))
+
+        let flash = try flashAttempt(store, flashed: fixture.flashed)
+        await flash.engine.enqueue(flash.request)
+        await flash.engine.drain()
+        XCTAssertEqual(flash.io.describeCount, 0)
+        XCTAssertTrue(flash.io.written.isEmpty)
+        let flashMessage = try XCTUnwrap(store.operations.first?.errorMessage)
+        XCTAssertTrue(flashMessage.contains(AppStore.ventoyReadUnfinished), flashMessage)
+
+        let copy = try copyAttempt(store, drive: fixture.drive)
+        await copy.engine.enqueueManual(copy.request, sourceFile: copy.source, fileName: copy.fileName)
+        await copy.engine.drain()
+        XCTAssertEqual(copy.writer.accessBalance, 0, "the drive was not even opened")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.volume.appendingPathComponent("notes.txt").path))
+        let copyMessage = try XCTUnwrap(store.operations.first { $0.id == copy.request.id }?.errorMessage)
+        XCTAssertTrue(copyMessage.contains(AppStore.ventoyReadUnfinished), copyMessage)
+
+        XCTAssertNotNil(store.deleteBlocker(fileName: "a.iso", on: fixture.drive))
+        XCTAssertTrue(store.canEject(fixture.drive), "Eject stays available")
+
+        // The stick leaves the device list: the mount went with it.
+        store.attachedDevices = []
+        XCTAssertFalse(store.ventoyStuckHolds.isEmpty)
+        store.attachedDevices = []
+        XCTAssertTrue(store.ventoyStuckHolds.isEmpty)
+        let wait = await store.waitForVentoyVersionReads(driveID: fixture.flashed.id, bsdName: "disk4")
+        XCTAssertEqual(wait, .clear)
+    }
+
+    func testACleanupInProgressHoldsFlashCopyDeleteAndEject() async throws {
+        let fixture = try await cleanupFixture(unmountFails: false)
+        let store = fixture.store
+        let inside = GateEvents()
+        let proceed = DispatchSemaphore(value: 0)
+        fixture.mounter.onUnmount = {
+            inside.record("unmounting")
+            proceed.wait()
+        }
+        defer { for _ in 0..<8 { proceed.signal() } }
+        let ejected = GateEvents()
+        store.flashedDiskEjector = { bsdName in ejected.record(bsdName) }
+
+        store.cleanUpLeftoverVentoyMounts()
+        await waitUntil { inside.values == ["unmounting"] }
+        XCTAssertEqual(store.ventoyEjectReservations.values.map(\.isCleanup), [true])
+
+        // Submitted while the janitor is inside the unmount.
+        let flash = try flashAttempt(store, flashed: fixture.flashed)
+        await flash.engine.enqueue(flash.request)
+        let copy = try copyAttempt(store, drive: fixture.drive)
+        await copy.engine.enqueueManual(copy.request, sourceFile: copy.source, fileName: copy.fileName)
+        XCTAssertNotNil(store.deleteBlocker(fileName: "a.iso", on: fixture.drive))
+        XCTAssertThrowsError(try store.deleteISO(fileName: "a.iso", on: fixture.drive.id))
+        XCTAssertFalse(store.canEject(fixture.drive))
+        XCTAssertFalse(store.canEject(fixture.flashed))
+        XCTAssertEqual(store.ejectBlocker(fixture.drive), AppStore.ventoyReadFinishing)
+        try store.eject(driveID: fixture.drive.id)   // refused: nothing is ejected
+        XCTAssertTrue(store.isConnected(fixture.drive), "refused: still connected")
+        store.ejectFlashedDrive(driveID: fixture.flashed.id)
+        try? await Task.sleep(nanoseconds: 150_000_000)
+        XCTAssertTrue(ejected.values.isEmpty, "the flashed eject was refused")
+        XCTAssertEqual(store.ventoyEjectReservations.count, 1, "no eject reservation was added")
+        XCTAssertEqual(flash.io.describeCount, 0, "the flash waits")
+        XCTAssertEqual(copy.writer.accessBalance, 0, "the copy waits")
+        XCTAssertFalse(FileManager.default.fileExists(atPath: fixture.volume.appendingPathComponent("notes.txt").path))
+
+        // The janitor finishes: the reservation ends and everything goes ahead.
+        for _ in 0..<8 { proceed.signal() }
+        await waitUntil { store.ventoyEjectReservations.isEmpty }
+        XCTAssertTrue(store.ventoyStuckHolds.isEmpty)
+        await flash.engine.drain()
+        await copy.engine.drain()
+        XCTAssertTrue(store.canEject(fixture.drive))
+        XCTAssertGreaterThan(flash.io.describeCount, 0, "the flash started once the janitor was done")
+        XCTAssertTrue(FileManager.default.fileExists(atPath: fixture.volume.appendingPathComponent("notes.txt").path),
+                      "the copy landed once the janitor was done")
+        store.ejectFlashedDrive(driveID: fixture.flashed.id)
+        await waitUntil { ejected.values == ["disk4"] }
     }
 
     // MARK: Janitor and the disk it unmounts on

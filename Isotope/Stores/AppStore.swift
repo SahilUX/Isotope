@@ -83,11 +83,19 @@ final class AppStore {
     /// Temporary VTOYEFI containers a read could not prove undone, or that the
     /// launch janitor could not clean; retried at quit.
     var ventoyLeftoverMounts: Set<URL> = []
-    /// The device each of those containers (from a read) still holds, by
-    /// container: nothing writes to, deletes from or copies to it until the
-    /// drive disconnects, the app quits or the janitor cleans the mount up.
-    /// Eject stays allowed: it is the recovery path (DESIGN §21).
-    var ventoyStuckHolds: [URL: VentoyProbeHold] = [:]
+    /// The physical device each of those containers (from a read or a failed
+    /// cleanup) still holds, by container: nothing writes to, deletes from or
+    /// copies to it until the mount is cleaned up or the whole disk has left
+    /// the device list, whatever happens to any registration. Eject stays
+    /// allowed: it is the recovery path (DESIGN §21).
+    var ventoyStuckHolds: [URL: VentoyStuckHold] = [:]
+    /// Asks the device watcher for a fresh scan; `DriveMonitor` sets it. A
+    /// held disk missing from one scan is confirmed gone by a second one.
+    var rescanDevices: (@MainActor () -> Void)?
+    /// How long after a held disk first goes missing the store asks for that
+    /// second scan.
+    var ventoyRemovalRecheckDelay: TimeInterval = 1
+    var ventoyRecheckPending = false
     /// After this long the store cancels a read: one still queued never
     /// starts and releases the device at once; one already running is asked
     /// to stop and keeps the device until it returns (DESIGN §21).
@@ -114,8 +122,8 @@ final class AppStore {
     /// External USB whole disks currently attached — the identity source for
     /// flashed drives, which have no mounted volume to key on (PRD F27).
     var attachedDevices: [FlashDevice] = [] {
-        // PRD F74: a disk that went away takes its unfinished Ventoy read with it.
-        didSet { releaseStuckVentoyHolds() }
+        // PRD F74: a disk that went away takes its unfinished Ventoy mount with it.
+        didSet { noteDeviceScanForVentoyHolds() }
     }
     /// Drives whose flash just finished, so the detail view can offer the eject
     /// (PRD F23). Cleared when the offer is taken or dismissed.

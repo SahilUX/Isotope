@@ -97,7 +97,7 @@ struct VentoyProbeResult: Equatable, Sendable {
     /// The private container folder (`isotope-vtoyefi-<UUID>`) of a mount the
     /// reader could not prove undone: the unmount failed, or the mount tool
     /// was still running after SIGKILL and may yet complete (DESIGN §21). The
-    /// store keeps the device held until the drive disconnects, the app quits
+    /// store keeps the device held until its disk is unplugged, the app quits
     /// or the janitor cleans it up; a whole-disk eject unmounts it too.
     var leftoverMount: URL?
 
@@ -201,6 +201,15 @@ struct VentoyFolderEntry: Equatable, Sendable {
     var permissions: UInt16
 }
 
+/// A leftover container the janitor could not clean up.
+struct VentoyCleanupFailure: Equatable, Sendable {
+    var container: URL
+    /// The whole disk its mount is on, when the janitor identified one and the
+    /// mount may still be there; nil when it did not get that far or the mount
+    /// is gone.
+    var wholeDisk: String?
+}
+
 struct VentoyVersionReader: VentoyVersionProbing {
     /// `grub.cfg` is about 100 KB; anything past this is not Ventoy's.
     static let maximumConfigBytes = 1 << 20
@@ -280,6 +289,13 @@ struct VentoyVersionReader: VentoyVersionProbing {
             return VentoyProbeResult(.unknown("Not read: \(refusal)"))
         }
         if let mounted = first.efi.mountPoint {
+            // A partition 2 mounted in one of our own private folders is an
+            // earlier read's mount that was never undone: it is held, not
+            // read in place (DESIGN §21).
+            if let container = Self.isotopeContainer(containing: mounted) {
+                return VentoyProbeResult(.unknown("The Ventoy EFI partition is still mounted by an earlier read"),
+                                         leftoverMount: container)
+            }
             return VentoyProbeResult(parse(at: mounted))
         }
         guard !ticket.isCancelled else { return cancelled }
@@ -336,6 +352,16 @@ struct VentoyVersionReader: VentoyVersionProbing {
         return VentoyProbeResult(reading)
     }
 
+    /// The `isotope-vtoyefi-<UUID>` folder `path` is in or under, or nil.
+    static func isotopeContainer(containing url: URL) -> URL? {
+        var folder = url.standardizedFileURL
+        while folder.pathComponents.count > 1 {
+            if folder.lastPathComponent.hasPrefix(directoryPrefix) { return folder }
+            folder = folder.deletingLastPathComponent()
+        }
+        return nil
+    }
+
     /// Why the snapshot is not the drive the store expects, or nil.
     static func identityRefusal(_ snapshot: VentoyDiskSnapshot, expected: VentoyExpectedIdentity) -> String? {
         guard let uuid = snapshot.dataVolumeUUID,
@@ -390,18 +416,20 @@ struct DisabledVentoyVersionReader: VentoyVersionProbing {
 /// path, read-only, FAT (`msdos`), from a partition 2 (`diskNs2`). Anything
 /// else is left alone and logged.
 struct VentoyMountJanitor: Sendable {
-    /// Called with the whole disk ("disk4") a mount is on, just before it is
-    /// unmounted: returns the release to call afterwards, or nil to skip this
-    /// mount because something is happening on that disk. The store reserves
-    /// the disk as an eject does (DESIGN §21). The default always allows it.
-    typealias DiskGate = @Sendable (String) -> (@Sendable () -> Void)?
+    /// Called with the container and the whole disk ("disk4") its mount is
+    /// on, just before it is unmounted: returns the release to call
+    /// afterwards, with whether the unmount worked, or nil to skip this mount
+    /// because something is happening on that disk. The store reserves the
+    /// disk as an eject does, for the whole unmount (DESIGN §21). The default
+    /// always allows it.
+    typealias DiskGate = @Sendable (URL, String) -> (@Sendable (Bool) -> Void)?
 
     var mounter: PartitionMounting = LivePartitionMounter()
     var temporaryDirectory: URL = FileManager.default.temporaryDirectory
     var removeDirectory: @Sendable (URL) -> Bool = { VentoyMountJanitor.rmdir($0) }
     var inspectEntry: @Sendable (URL) -> VentoyFolderEntry? = { VentoyMountJanitor.lstatEntry($0) }
     var currentUID: uid_t = getuid()
-    var diskGate: DiskGate = { _ in {} }
+    var diskGate: DiskGate = { _, _ in { _ in } }
 
     /// `isotope-vtoyefi-*` entries in the temporary directory. `cleanUp`
     /// decides whether each one is really ours.
@@ -415,46 +443,62 @@ struct VentoyMountJanitor: Sendable {
     /// the empty container. True when the container is gone.
     @discardableResult
     func cleanUp(_ container: URL) -> Bool {
+        attemptCleanUp(container) == nil
+    }
+
+    /// `cleanUp`, saying what is left when it fails: the whole disk the mount
+    /// is on, when it was identified and the mount may still be there.
+    func attemptCleanUp(_ container: URL) -> VentoyCleanupFailure? {
+        func failed(_ disk: String? = nil) -> VentoyCleanupFailure {
+            VentoyCleanupFailure(container: container, wholeDisk: disk)
+        }
         if let refusal = folderRefusal(container) {
             VentoyVersionReader.log.error("Left \(container.path, privacy: .public) alone: \(refusal, privacy: .public)")
-            return false
+            return failed()
         }
         let mountPoint = container.appendingPathComponent(VentoyVersionReader.mountPointName, isDirectory: true)
         if let entry = inspectEntry(mountPoint) {
             // Not owner or mode: while mounted, lstat reports the FAT root's.
             guard entry.isDirectory, !entry.isSymlink else {
                 VentoyVersionReader.log.error("Left \(container.path, privacy: .public) alone: its mount point is not a folder")
-                return false
+                return failed()
             }
             if mounter.isMounted(at: mountPoint) {
                 guard let info = mounter.mountInfo(at: mountPoint) else {
                     VentoyVersionReader.log.error("Left \(container.path, privacy: .public) alone: its mount could not be described")
-                    return false
+                    return failed()
                 }
                 if let refusal = Self.mountRefusal(info, at: mountPoint) {
                     VentoyVersionReader.log.error("Left \(container.path, privacy: .public) alone: \(refusal, privacy: .public)")
-                    return false
+                    return failed()
                 }
-                guard let disk = Self.wholeDisk(ofPartition: info.mountedFrom),
-                      let release = diskGate(disk) else {
+                guard let disk = Self.wholeDisk(ofPartition: info.mountedFrom) else { return failed() }
+                guard let release = diskGate(container, disk) else {
                     VentoyVersionReader.log.error("Left \(container.path, privacy: .public) alone: its disk is busy")
-                    return false
+                    return failed(disk)
                 }
-                defer { release() }
-                guard mounter.unmount(directory: mountPoint) else {
+                let unmounted = mounter.unmount(directory: mountPoint)
+                release(unmounted)
+                guard unmounted else {
                     VentoyVersionReader.log.error("Leftover Ventoy mount at \(mountPoint.path, privacy: .public) could not be unmounted")
-                    return false
+                    return failed(disk)
                 }
             }
-            guard removeDirectory(mountPoint) else { return false }
+            guard removeDirectory(mountPoint) else { return failed() }
         }
-        return removeDirectory(container)
+        return removeDirectory(container) ? nil : failed()
+    }
+
+    /// The containers that could not be cleaned up, each with the whole disk
+    /// its mount is still on when that is known.
+    func cleanUpAll() -> [VentoyCleanupFailure] {
+        leftovers().compactMap(attemptCleanUp)
     }
 
     /// The containers that could not be cleaned up (or were not ours).
     @discardableResult
     func cleanUpLeftovers() -> [URL] {
-        leftovers().filter { !cleanUp($0) }
+        cleanUpAll().map(\.container)
     }
 
     /// Why `directory` is not one of our own containers, or nil.

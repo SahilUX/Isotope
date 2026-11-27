@@ -58,6 +58,7 @@ final class DriveMonitor {
         devices.start { [weak self] in
             MainActor.assumeIsolated { self?.refreshDevices() }
         }
+        store.rescanDevices = { [weak self] in self?.refreshDevices() }
         refreshDevices()
     }
 
