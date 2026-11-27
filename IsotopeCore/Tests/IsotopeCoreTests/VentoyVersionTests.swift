@@ -155,4 +155,13 @@ final class VentoyVersionTests: XCTestCase {
         XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(isExternal: false)))
         XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(isBootDisk: true)))
     }
+
+    func testOnlyTheGPTTypeAllowsTheDiskutilFallback() {
+        XCTAssertTrue(VentoyEFIPartitionRule.isGPTEFIType("C12A7328-F81F-11D2-BA4B-00A0C93EC93B"))
+        XCTAssertTrue(VentoyEFIPartitionRule.isGPTEFIType("c12a7328-f81f-11d2-ba4b-00a0c93ec93b"))
+        XCTAssertTrue(VentoyEFIPartitionRule.isGPTEFIType("EFI"))
+        XCTAssertFalse(VentoyEFIPartitionRule.isGPTEFIType("0xEF"))
+        XCTAssertFalse(VentoyEFIPartitionRule.isGPTEFIType(nil))
+        XCTAssertFalse(VentoyEFIPartitionRule.isGPTEFIType("DOS_FAT_32"))
+    }
 }

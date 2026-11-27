@@ -72,14 +72,30 @@ final class AppStore {
     var ventoyVersions: [UUID: VentoyVersionReading] = [:]
     /// Reads in progress, each with the token of the connect it belongs to.
     var ventoyVersionReads: [UUID: UUID] = [:]
-    /// Every read that has started and not returned, by token, with the device
-    /// it holds. Outlives an unplug or unregister, so no read is lost track of.
+    /// Every read that is queued or running, by token, with the device it
+    /// holds. A running read outlives an unplug or unregister, so no read
+    /// that may have a mount is lost track of.
     var ventoyProbes: [UUID: VentoyProbeHold] = [:]
+    /// Each read's cancellation ticket, by the same token.
+    var ventoyReadTickets: [UUID: VentoyReadTicket] = [:]
+    /// Ejects under way: no read is started for those disks meanwhile.
+    var ventoyEjectReservations: [UUID: VentoyEjectReservation] = [:]
     /// Temporary VTOYEFI mounts a read could not undo; retried at quit.
     var ventoyLeftoverMounts: Set<URL> = []
-    /// After this long the store stops waiting for a read and releases its
-    /// hold on the device (DESIGN §21).
+    /// After this long the store cancels a read: one still queued never
+    /// starts and releases the device at once; one already running is asked
+    /// to stop and keeps the device until it returns (DESIGN §21).
     var ventoyVersionReadCap: TimeInterval = 60
+    /// How long an update, copy or flash waits for a read before it is
+    /// refused: the cap (a queued read) plus the longest a running read can
+    /// take, plus a margin. About 3 minutes; a read still holding the device
+    /// after that is treated as stuck.
+    var ventoyVersionWaitLimit: TimeInterval = 60 + VentoyVersionReader.activeReadBound + 5
+    /// `diskutil eject` for a flashed drive's whole disk; injectable so tests
+    /// never eject anything.
+    var flashedDiskEjector: @Sendable (String) async -> Void = { bsdName in
+        await Task.detached { _ = try? DiskUtil.run(["eject", "/dev/\(bsdName)"]) }.value
+    }
     /// Mounts VTOYEFI read-only; never under XCTest, where tests inject a fake.
     var ventoyVersionReader: VentoyVersionProbing =
         LaunchEnvironment.isRunningUnderTest ? DisabledVentoyVersionReader() : VentoyVersionReader()

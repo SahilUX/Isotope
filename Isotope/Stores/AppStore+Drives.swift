@@ -525,6 +525,9 @@ extension AppStore {
         guard let drive = drive(id: driveID) else { return }
         guard !hasOperationsInFlight(drive), !isReadingVentoyVersion(drive) else { return }
         guard let info = volumeInfo(for: drive) else { return }
+        // PRD F74: no Ventoy version read starts for this disk while it ejects.
+        let reservation = reserveForEject(wholeDisk: physicalDisk(of: drive), volumeUUIDs: [drive.volumeUUID])
+        defer { releaseEjectReservation(reservation) }
         try DriveAccess.eject(volumeURL: info.url)
         markDisconnected(volumeUUID: drive.volumeUUID)
     }

@@ -3,6 +3,113 @@ import IsotopeCore
 import XCTest
 @testable import Isotope
 
+// MARK: - Fakes
+
+/// Answers each `snapshot` call from a script: the first call gets the
+/// first entry, and the last entry repeats.
+final class FakeDisks: VentoyDiskInspecting, @unchecked Sendable {
+    private let lock = NSLock()
+    private var script: [VentoyDiskSnapshot?]
+    private(set) var calls = 0
+    init(_ script: [VentoyDiskSnapshot?]) { self.script = script }
+    convenience init(_ snapshot: VentoyDiskSnapshot?) { self.init([snapshot]) }
+    func snapshot(forVolumeAt url: URL) -> VentoyDiskSnapshot? {
+        lock.lock(); defer { lock.unlock() }
+        let index = min(calls, script.count - 1)
+        calls += 1
+        return script[index]
+    }
+}
+
+final class FakeMounter: PartitionMounting, @unchecked Sendable {
+    private let lock = NSLock()
+    var mountSucceeds = true
+    /// A mount that "fails" but leaves something mounted (a timeout).
+    var leavesMountedOnFailure = false
+    /// How many unmount calls fail before one succeeds; -1 never succeeds.
+    var unmountFailures = 0
+    /// Written into the mount directory when the mount succeeds.
+    var config: String?
+    private(set) var mounts: [(String, URL)] = []
+    private(set) var unmounts: [URL] = []
+    private(set) var identityChecks = 0
+    private var mounted: Set<URL> = []
+
+    private(set) var fallbackAllowed: [Bool] = []
+    /// What `mountInfo` reports for a mounted directory; defaults to our own
+    /// read-only FAT mount of a partition 2.
+    var info: (URL) -> VentoyMountInfo = { directory in
+        VentoyMountInfo(mountedOn: directory.path, mountedFrom: "/dev/disk9s2", fileSystem: "msdos",
+                        isReadOnly: true)
+    }
+
+    func mountReadOnly(devicePath: String, at directory: URL, allowsDiskutilFallback: Bool,
+                       isStillSameDevice: () -> Bool) -> VentoyMountOutcome {
+        identityChecks += 1
+        guard isStillSameDevice() else { return .identityChanged }
+        lock.lock(); defer { lock.unlock() }
+        mounts.append((devicePath, directory))
+        fallbackAllowed.append(allowsDiskutilFallback)
+        if mountSucceeds, let config {
+            let grub = directory.appendingPathComponent("grub", isDirectory: true)
+            try? FileManager.default.createDirectory(at: grub, withIntermediateDirectories: true)
+            try? config.write(to: grub.appendingPathComponent("grub.cfg"), atomically: true, encoding: .utf8)
+        }
+        if mountSucceeds || leavesMountedOnFailure { mounted.insert(directory) }
+        return mountSucceeds ? .mounted : .failed
+    }
+
+    func isMounted(at directory: URL) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        return mounted.contains(directory)
+    }
+
+    func mountInfo(at directory: URL) -> VentoyMountInfo? {
+        isMounted(at: directory) ? info(directory) : nil
+    }
+
+    var mountCount: Int { lock.withLock { mounts.count } }
+
+    func markMounted(_ directory: URL) {
+        lock.lock(); defer { lock.unlock() }
+        mounted.insert(directory)
+    }
+
+    func unmount(directory: URL) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        unmounts.append(directory)
+        if unmountFailures != 0 {
+            if unmountFailures > 0 { unmountFailures -= 1 }
+            return false
+        }
+        mounted.remove(directory)
+        // Stand-in for the mounted filesystem going away.
+        try? FileManager.default.removeItem(at: directory.appendingPathComponent("grub"))
+        return true
+    }
+}
+
+func ventoySnapshot(whole: String = "disk9", partitionWhole: String = "disk9",
+                    name: String = "disk9s2", dataPartition: String = "disk9s1",
+                    volumeUUID: String? = "UUID-A", mediaUUID: String = "MEDIA-1",
+                    size: Int64 = 32 * 1024 * 1024, content: String = "0xEF",
+                    volumeName: String? = "VTOYEFI", isUSB: Bool = true,
+                    mountPoint: URL? = nil) -> VentoyDiskSnapshot {
+    VentoyDiskSnapshot(
+        dataPartitionBSDName: dataPartition, dataVolumeUUID: volumeUUID,
+        wholeDisk: VentoyDiskIdentity(bsdName: whole, mediaUUID: mediaUUID,
+                                      mediaPath: "IODeviceTree:/usb/\(mediaUUID)", devicePath: nil,
+                                      hardwareID: HardwareID(vendorID: 1, productID: 2, serialNumber: "S1")),
+        efi: VentoyEFIPartitionInfo(
+            candidate: VentoyEFIPartitionCandidate(
+                dataWholeDisk: whole, partitionBSDName: name, partitionWholeDisk: partitionWhole,
+                sizeBytes: size, content: content,
+                disk: FlashDeviceDescription(bsdName: whole, displayName: "Stick",
+                                             sizeBytes: 64_000_000_000, isUSB: isUSB),
+                dataPartitionBSDName: dataPartition, volumeName: volumeName),
+            mountPoint: mountPoint))
+}
+
 /// PRD F74, entirely with fakes: no disk is inspected, nothing is mounted.
 final class VentoyVersionReaderTests: XCTestCase {
     private var root: URL!
@@ -15,98 +122,6 @@ final class VentoyVersionReaderTests: XCTestCase {
 
     override func tearDownWithError() throws {
         try? FileManager.default.removeItem(at: root)
-    }
-
-    // MARK: Fakes
-
-    /// Answers each `snapshot` call from a script: the first call gets the
-    /// first entry, and the last entry repeats.
-    private final class FakeDisks: VentoyDiskInspecting, @unchecked Sendable {
-        private let lock = NSLock()
-        private var script: [VentoyDiskSnapshot?]
-        private(set) var calls = 0
-        init(_ script: [VentoyDiskSnapshot?]) { self.script = script }
-        convenience init(_ snapshot: VentoyDiskSnapshot?) { self.init([snapshot]) }
-        func snapshot(forVolumeAt url: URL) -> VentoyDiskSnapshot? {
-            lock.lock(); defer { lock.unlock() }
-            let index = min(calls, script.count - 1)
-            calls += 1
-            return script[index]
-        }
-    }
-
-    private final class FakeMounter: PartitionMounting, @unchecked Sendable {
-        private let lock = NSLock()
-        var mountSucceeds = true
-        /// A mount that "fails" but leaves something mounted (a timeout).
-        var leavesMountedOnFailure = false
-        /// How many unmount calls fail before one succeeds; -1 never succeeds.
-        var unmountFailures = 0
-        /// Written into the mount directory when the mount succeeds.
-        var config: String?
-        private(set) var mounts: [(String, URL)] = []
-        private(set) var unmounts: [URL] = []
-        private(set) var identityChecks = 0
-        private var mounted: Set<URL> = []
-
-        func mountReadOnly(devicePath: String, at directory: URL,
-                           isStillSameDevice: () -> Bool) -> VentoyMountOutcome {
-            identityChecks += 1
-            guard isStillSameDevice() else { return .identityChanged }
-            lock.lock(); defer { lock.unlock() }
-            mounts.append((devicePath, directory))
-            if mountSucceeds, let config {
-                let grub = directory.appendingPathComponent("grub", isDirectory: true)
-                try? FileManager.default.createDirectory(at: grub, withIntermediateDirectories: true)
-                try? config.write(to: grub.appendingPathComponent("grub.cfg"), atomically: true, encoding: .utf8)
-            }
-            if mountSucceeds || leavesMountedOnFailure { mounted.insert(directory) }
-            return mountSucceeds ? .mounted : .failed
-        }
-
-        func isMounted(at directory: URL) -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            return mounted.contains(directory)
-        }
-
-        func markMounted(_ directory: URL) {
-            lock.lock(); defer { lock.unlock() }
-            mounted.insert(directory)
-        }
-
-        func unmount(directory: URL) -> Bool {
-            lock.lock(); defer { lock.unlock() }
-            unmounts.append(directory)
-            if unmountFailures != 0 {
-                if unmountFailures > 0 { unmountFailures -= 1 }
-                return false
-            }
-            mounted.remove(directory)
-            // Stand-in for the mounted filesystem going away.
-            try? FileManager.default.removeItem(at: directory.appendingPathComponent("grub"))
-            return true
-        }
-    }
-
-    private func snapshot(whole: String = "disk9", partitionWhole: String = "disk9",
-                          name: String = "disk9s2", dataPartition: String = "disk9s1",
-                          volumeUUID: String? = "UUID-A", mediaUUID: String = "MEDIA-1",
-                          size: Int64 = 32 * 1024 * 1024, content: String = "0xEF",
-                          volumeName: String? = "VTOYEFI", isUSB: Bool = true,
-                          mountPoint: URL? = nil) -> VentoyDiskSnapshot {
-        VentoyDiskSnapshot(
-            dataPartitionBSDName: dataPartition, dataVolumeUUID: volumeUUID,
-            wholeDisk: VentoyDiskIdentity(bsdName: whole, mediaUUID: mediaUUID,
-                                          mediaPath: "IODeviceTree:/usb/\(mediaUUID)", devicePath: nil,
-                                          hardwareID: HardwareID(vendorID: 1, productID: 2, serialNumber: "S1")),
-            efi: VentoyEFIPartitionInfo(
-                candidate: VentoyEFIPartitionCandidate(
-                    dataWholeDisk: whole, partitionBSDName: name, partitionWholeDisk: partitionWhole,
-                    sizeBytes: size, content: content,
-                    disk: FlashDeviceDescription(bsdName: whole, displayName: "Stick",
-                                                 sizeBytes: 64_000_000_000, isUSB: isUSB),
-                    dataPartitionBSDName: dataPartition, volumeName: volumeName),
-                mountPoint: mountPoint))
     }
 
     private func reader(disks: FakeDisks, mounter: FakeMounter) -> VentoyVersionReader {
@@ -126,7 +141,14 @@ final class VentoyVersionReaderTests: XCTestCase {
 
     private func read(_ disks: FakeDisks, _ mounter: FakeMounter,
                       expected: VentoyExpectedIdentity? = nil) -> VentoyProbeResult {
-        reader(disks: disks, mounter: mounter).readVersion(volumeURL: volume, expected: expected ?? self.expected)
+        reader(disks: disks, mounter: mounter).readVersion(volumeURL: volume, expected: expected ?? self.expected,
+                                                           ticket: activeTicket())
+    }
+
+    private func activeTicket() -> VentoyReadTicket {
+        let ticket = VentoyReadTicket()
+        XCTAssertTrue(ticket.activate())
+        return ticket
     }
 
     private let grub = "function x {\n}\nset VENTOY_VERSION=\"1.1.18\"\n"
@@ -136,32 +158,32 @@ final class VentoyVersionReaderTests: XCTestCase {
 
     func testWrongSizeIsNotMounted() {
         let mounter = FakeMounter()
-        XCTAssertNil(read(FakeDisks(snapshot(size: 300 * 1024 * 1024)), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(size: 300 * 1024 * 1024)), mounter).reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
 
     func testWrongTypeOrNameIsNotMounted() {
         let mounter = FakeMounter()
-        XCTAssertNil(read(FakeDisks(snapshot(content: "Windows_NTFS")), mounter).reading.version)
-        XCTAssertNil(read(FakeDisks(snapshot(volumeName: "EFI")), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(content: "Windows_NTFS")), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(volumeName: "EFI")), mounter).reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
 
     func testPartitionOnAnotherWholeDiskIsNotMounted() {
         let mounter = FakeMounter()
-        XCTAssertNil(read(FakeDisks(snapshot(partitionWhole: "disk3", name: "disk3s2")), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(partitionWhole: "disk3", name: "disk3s2")), mounter).reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
 
     func testDataVolumeThatIsNotPartitionOneIsNotMounted() {
         let mounter = FakeMounter()
-        XCTAssertNil(read(FakeDisks(snapshot(dataPartition: "disk9s3")), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(dataPartition: "disk9s3")), mounter).reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
 
     func testNonUSBDiskIsNotMounted() {
         let mounter = FakeMounter()
-        XCTAssertNil(read(FakeDisks(snapshot(isUSB: false)), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(isUSB: false)), mounter).reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
 
@@ -177,7 +199,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         // Another stick now answers at the registered drive's mount path.
         let mounter = FakeMounter()
         mounter.config = grub
-        let result = read(FakeDisks(snapshot(volumeUUID: "UUID-OTHER")), mounter)
+        let result = read(FakeDisks(ventoySnapshot(volumeUUID: "UUID-OTHER")), mounter)
         XCTAssertNil(result.reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
@@ -185,11 +207,11 @@ final class VentoyVersionReaderTests: XCTestCase {
     func testDriveOnAnotherDiskOrDeviceThanExpectedIsNotMounted() {
         let mounter = FakeMounter()
         mounter.config = grub
-        XCTAssertNil(read(FakeDisks(snapshot(whole: "disk5", partitionWhole: "disk5", name: "disk5s2",
+        XCTAssertNil(read(FakeDisks(ventoySnapshot(whole: "disk5", partitionWhole: "disk5", name: "disk5s2",
                                              dataPartition: "disk5s1")), mounter).reading.version)
         var other = expected
         other.hardwareID = HardwareID(vendorID: 1, productID: 2, serialNumber: "S2")
-        XCTAssertNil(read(FakeDisks(snapshot()), mounter, expected: other).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot()), mounter, expected: other).reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
     }
 
@@ -198,7 +220,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         // disk with the same layout (macOS reused the BSD name).
         let mounter = FakeMounter()
         mounter.config = grub
-        let result = read(FakeDisks([snapshot(), snapshot(mediaUUID: "MEDIA-2")]), mounter)
+        let result = read(FakeDisks([ventoySnapshot(), ventoySnapshot(mediaUUID: "MEDIA-2")]), mounter)
         XCTAssertNil(result.reading.version)
         XCTAssertTrue(mounter.mounts.isEmpty)
         XCTAssertEqual(mounter.identityChecks, 1)
@@ -208,7 +230,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         let mounter = FakeMounter()
         mounter.config = grub
         // 1: first look, 2: before the mount attempt, 3: right after it.
-        let result = read(FakeDisks([snapshot(), snapshot(), snapshot(mediaUUID: "MEDIA-2")]), mounter)
+        let result = read(FakeDisks([ventoySnapshot(), ventoySnapshot(), ventoySnapshot(mediaUUID: "MEDIA-2")]), mounter)
         XCTAssertNil(result.reading.version)
         let directory = try XCTUnwrap(mounter.mounts.first?.1)
         XCTAssertEqual(mounter.unmounts, [directory])
@@ -219,8 +241,8 @@ final class VentoyVersionReaderTests: XCTestCase {
         // After mounting, DiskArbitration reports where VTOYEFI is mounted.
         let mounter = FakeMounter()
         mounter.config = grub
-        let after = snapshot(mountPoint: URL(fileURLWithPath: "/private/tmp/isotope-vtoyefi-x"))
-        XCTAssertEqual(read(FakeDisks([snapshot(), snapshot(), after]), mounter).reading.version,
+        let after = ventoySnapshot(mountPoint: URL(fileURLWithPath: "/private/tmp/isotope-vtoyefi-x"))
+        XCTAssertEqual(read(FakeDisks([ventoySnapshot(), ventoySnapshot(), after]), mounter).reading.version,
                        VentoyVersion("1.1.18"))
     }
 
@@ -229,7 +251,7 @@ final class VentoyVersionReaderTests: XCTestCase {
     func testReadsVersionAndUnmountsAndRemovesFolder() throws {
         let mounter = FakeMounter()
         mounter.config = grub
-        let disks = FakeDisks(snapshot())
+        let disks = FakeDisks(ventoySnapshot())
         let result = read(disks, mounter)
         XCTAssertEqual(result, VentoyProbeResult(.known(VentoyVersion("1.1.18")!)))
         XCTAssertEqual(mounter.mounts.map(\.0), ["/dev/disk9s2"])
@@ -242,7 +264,7 @@ final class VentoyVersionReaderTests: XCTestCase {
     func testFailedMountIsUnknownAndLeavesNoFolder() throws {
         let mounter = FakeMounter()
         mounter.mountSucceeds = false
-        let result = read(FakeDisks(snapshot()), mounter)
+        let result = read(FakeDisks(ventoySnapshot()), mounter)
         XCTAssertNil(result.reading.version)
         let directory = try XCTUnwrap(mounter.mounts.first?.1)
         XCTAssertTrue(mounter.unmounts.isEmpty, "nothing was mounted, so nothing to unmount")
@@ -253,19 +275,19 @@ final class VentoyVersionReaderTests: XCTestCase {
         let mounter = FakeMounter()
         mounter.mountSucceeds = false
         mounter.leavesMountedOnFailure = true
-        _ = read(FakeDisks(snapshot()), mounter)
+        _ = read(FakeDisks(ventoySnapshot()), mounter)
         XCTAssertEqual(mounter.unmounts.count, 1)
     }
 
     func testUnmountsEvenWhenReadingFails() {
         let mounter = FakeMounter()
         mounter.config = nil   // mounted, but no grub.cfg
-        XCTAssertNil(read(FakeDisks(snapshot()), mounter).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot()), mounter).reading.version)
         XCTAssertEqual(mounter.unmounts.count, 1)
 
         let garbage = FakeMounter()
         garbage.config = "\u{0}\u{1} not grub"
-        XCTAssertNil(read(FakeDisks(snapshot()), garbage).reading.version)
+        XCTAssertNil(read(FakeDisks(ventoySnapshot()), garbage).reading.version)
         XCTAssertEqual(garbage.unmounts.count, 1)
     }
 
@@ -273,7 +295,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         let mounter = FakeMounter()
         mounter.config = grub
         mounter.unmountFailures = -1
-        let result = read(FakeDisks(snapshot()), mounter)
+        let result = read(FakeDisks(ventoySnapshot()), mounter)
         XCTAssertEqual(result.reading, .unknown("cleanup failed"))
         let directory = try XCTUnwrap(mounter.mounts.first?.1)
         XCTAssertEqual(result.leftoverMount, directory)
@@ -287,7 +309,7 @@ final class VentoyVersionReaderTests: XCTestCase {
                                                 withIntermediateDirectories: true)
         try grub.write(to: existing.appendingPathComponent("grub/grub.cfg"), atomically: true, encoding: .utf8)
         let mounter = FakeMounter()
-        let result = read(FakeDisks(snapshot(mountPoint: existing)), mounter)
+        let result = read(FakeDisks(ventoySnapshot(mountPoint: existing)), mounter)
         XCTAssertEqual(result.reading.version, VentoyVersion("1.1.18"))
         XCTAssertTrue(mounter.mounts.isEmpty)
         XCTAssertTrue(mounter.unmounts.isEmpty)
@@ -296,14 +318,69 @@ final class VentoyVersionReaderTests: XCTestCase {
     func testReadsAtMostOneMebibyte() {
         let mounter = FakeMounter()
         mounter.config = grub
-        var reader = reader(disks: FakeDisks(snapshot()), mounter: mounter)
+        var reader = reader(disks: FakeDisks(ventoySnapshot()), mounter: mounter)
         let limits = LimitRecorder()
         reader.readFile = { url, limit in
             limits.record(limit)
             return try? Data(contentsOf: url)
         }
-        _ = reader.readVersion(volumeURL: volume, expected: expected)
+        _ = reader.readVersion(volumeURL: volume, expected: expected, ticket: activeTicket())
         XCTAssertEqual(limits.values, [1 << 20])
+    }
+
+    // MARK: Cancellation tickets
+
+    func testCancelledTicketDescribesAndMountsNothing() {
+        let disks = FakeDisks(ventoySnapshot())
+        let mounter = FakeMounter()
+        mounter.config = grub
+        let ticket = VentoyReadTicket()
+        XCTAssertTrue(ticket.cancel(), "a queued ticket can be released at once")
+        XCTAssertFalse(ticket.activate(), "and never starts")
+        let result = reader(disks: disks, mounter: mounter).readVersion(volumeURL: volume, expected: expected,
+                                                                        ticket: ticket)
+        XCTAssertEqual(result.reading, .unknown(VentoyReadTicket.cancelledReason))
+        XCTAssertEqual(disks.calls, 0)
+        XCTAssertEqual(mounter.mountCount, 0)
+    }
+
+    func testTicketCancelledBeforeTheMountAttemptStopsIt() throws {
+        let mounter = FakeMounter()
+        mounter.config = grub
+        let ticket = VentoyReadTicket()
+        XCTAssertTrue(ticket.activate())
+        var reader = reader(disks: FakeDisks(ventoySnapshot()), mounter: mounter)
+        let base = root!
+        // The cap lands after the folder is made, just before the mount.
+        reader.makeDirectory = {
+            let url = base.appendingPathComponent("mnt-late", isDirectory: true)
+            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            XCTAssertFalse(ticket.cancel(), "an active read keeps its hold")
+            return url
+        }
+        let result = reader.readVersion(volumeURL: volume, expected: expected, ticket: ticket)
+        XCTAssertEqual(result.reading, .unknown(VentoyReadTicket.cancelledReason))
+        XCTAssertEqual(mounter.mountCount, 0)
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path), [])
+        ticket.finish()
+        XCTAssertTrue(ticket.cancel(), "a finished read holds nothing")
+    }
+
+    func testDiskutilFallbackOnlyOnGPT() {
+        let mbr = FakeMounter()
+        mbr.config = grub
+        _ = read(FakeDisks(ventoySnapshot(content: "0xEF")), mbr)
+        XCTAssertEqual(mbr.fallbackAllowed, [false])
+        let gpt = FakeMounter()
+        gpt.config = grub
+        _ = read(FakeDisks(ventoySnapshot(content: "C12A7328-F81F-11D2-BA4B-00A0C93EC93B")), gpt)
+        XCTAssertEqual(gpt.fallbackAllowed, [true])
+    }
+
+    func testActiveReadBoundCoversEveryToolLimit() {
+        // 2 mount attempts + 2 × 3 unmount steps, each 10 + 2 + 2 s, plus 8 s.
+        XCTAssertEqual(LivePartitionMounter.toolBound, 14)
+        XCTAssertEqual(VentoyVersionReader.activeReadBound, 120)
     }
 
     // MARK: Leftover mounts
@@ -312,9 +389,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         let mine = root.appendingPathComponent("isotope-vtoyefi-A", isDirectory: true)
         let mounted = root.appendingPathComponent("isotope-vtoyefi-B", isDirectory: true)
         let other = root.appendingPathComponent("something-else", isDirectory: true)
-        for url in [mine, mounted, other] {
-            try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
-        }
+        for url in [mine, mounted, other] { try makePrivateFolder(url) }
         let mounter = FakeMounter()
         mounter.markMounted(mounted)
         let janitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
@@ -330,19 +405,97 @@ final class VentoyVersionReaderTests: XCTestCase {
         // A folder with something in it (a mount that is somehow still there,
         // as far as the janitor can tell) is left exactly as it is.
         let folder = root.appendingPathComponent("isotope-vtoyefi-C", isDirectory: true)
-        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try makePrivateFolder(folder)
         try Data("x".utf8).write(to: folder.appendingPathComponent("file"))
         let janitor = VentoyMountJanitor(mounter: FakeMounter(), temporaryDirectory: root)
         XCTAssertEqual(janitor.cleanUpLeftovers(), [folder])
         XCTAssertTrue(FileManager.default.fileExists(atPath: folder.appendingPathComponent("file").path))
 
         let stuck = root.appendingPathComponent("isotope-vtoyefi-D", isDirectory: true)
-        try FileManager.default.createDirectory(at: stuck, withIntermediateDirectories: true)
+        try makePrivateFolder(stuck)
         let mounter = FakeMounter()
         mounter.markMounted(stuck)
         mounter.unmountFailures = -1
         XCTAssertFalse(VentoyMountJanitor(mounter: mounter, temporaryDirectory: root).cleanUp(stuck))
         XCTAssertTrue(FileManager.default.fileExists(atPath: stuck.path))
+    }
+
+    func testJanitorNeverFollowsAPrefixedSymlink() throws {
+        let target = root.appendingPathComponent("elsewhere", isDirectory: true)
+        try makePrivateFolder(target)
+        let link = root.appendingPathComponent("isotope-vtoyefi-LINK")
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        let mounter = FakeMounter()
+        mounter.markMounted(link)
+        let janitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
+        XCTAssertEqual(janitor.cleanUpLeftovers().map(\.path), [link.path])
+        XCTAssertEqual(mounter.unmounts, [])
+        XCTAssertNotNil(try? FileManager.default.destinationOfSymbolicLink(atPath: link.path))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: target.path))
+    }
+
+    func testJanitorLeavesAnUnrelatedMountAlone() throws {
+        let folder = root.appendingPathComponent("isotope-vtoyefi-W", isDirectory: true)
+        try makePrivateFolder(folder)
+        let cases: [(String, VentoyMountInfo)] = [
+            ("writable", VentoyMountInfo(mountedOn: folder.path, mountedFrom: "/dev/disk9s2",
+                                         fileSystem: "msdos", isReadOnly: false)),
+            ("not this path", VentoyMountInfo(mountedOn: "/Volumes/Data", mountedFrom: "/dev/disk9s2",
+                                              fileSystem: "msdos", isReadOnly: true)),
+            ("not FAT", VentoyMountInfo(mountedOn: folder.path, mountedFrom: "/dev/disk9s2",
+                                        fileSystem: "apfs", isReadOnly: true)),
+            ("not partition 2", VentoyMountInfo(mountedOn: folder.path, mountedFrom: "/dev/disk9s1",
+                                                fileSystem: "msdos", isReadOnly: true)),
+            ("not a disk", VentoyMountInfo(mountedOn: folder.path, mountedFrom: "map auto_home",
+                                           fileSystem: "msdos", isReadOnly: true)),
+        ]
+        for (label, info) in cases {
+            let mounter = FakeMounter()
+            mounter.markMounted(folder)
+            mounter.info = { _ in info }
+            XCTAssertFalse(VentoyMountJanitor(mounter: mounter, temporaryDirectory: root).cleanUp(folder), label)
+            XCTAssertEqual(mounter.unmounts, [], label)
+            XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path), label)
+        }
+        // Our own mount, as FSKit reports it, is undone.
+        let mounter = FakeMounter()
+        mounter.markMounted(folder)
+        mounter.info = { _ in VentoyMountInfo(mountedOn: folder.path, mountedFrom: "disk9s2",
+                                              fileSystem: "msdos", isReadOnly: true) }
+        XCTAssertTrue(VentoyMountJanitor(mounter: mounter, temporaryDirectory: root).cleanUp(folder))
+        XCTAssertEqual(mounter.unmounts, [folder])
+    }
+
+    func testJanitorLeavesAFolderItDoesNotOwnAlone() throws {
+        let folder = root.appendingPathComponent("isotope-vtoyefi-O", isDirectory: true)
+        try makePrivateFolder(folder)
+        let mounter = FakeMounter()
+        mounter.markMounted(folder)
+        var janitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
+        janitor.currentUID = getuid() + 1
+        XCTAssertFalse(janitor.cleanUp(folder))
+        XCTAssertEqual(mounter.unmounts, [])
+        XCTAssertTrue(FileManager.default.fileExists(atPath: folder.path))
+
+        // Nor one with other permissions, or one outside the temporary directory.
+        let open = root.appendingPathComponent("isotope-vtoyefi-P", isDirectory: true)
+        try FileManager.default.createDirectory(at: open, withIntermediateDirectories: true,
+                                                attributes: [.posixPermissions: 0o755])
+        XCTAssertFalse(VentoyMountJanitor(mounter: FakeMounter(), temporaryDirectory: root).cleanUp(open))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: open.path))
+        let nested = root.appendingPathComponent("sub/isotope-vtoyefi-Q", isDirectory: true)
+        try makePrivateFolder(nested)
+        XCTAssertFalse(VentoyMountJanitor(mounter: FakeMounter(), temporaryDirectory: root).cleanUp(nested))
+        XCTAssertTrue(FileManager.default.fileExists(atPath: nested.path))
+    }
+
+    func testPartitionTwoNames() {
+        for name in ["/dev/disk4s2", "disk4s2", "/dev/disk12s2"] {
+            XCTAssertTrue(VentoyMountJanitor.isPartitionTwo(name), name)
+        }
+        for name in ["/dev/disk4s1", "disk4s12", "/dev/disk4", "disks2", "/dev/diskXs2", "map -hosts"] {
+            XCTAssertFalse(VentoyMountJanitor.isPartitionTwo(name), name)
+        }
     }
 
     // MARK: Bounded processes
@@ -425,7 +578,8 @@ final class FakeVentoyProbe: VentoyVersionProbing, @unchecked Sendable {
 
     func set(_ result: VentoyProbeResult, for url: URL) { lock.withLock { answers[url] = result } }
 
-    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult {
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity,
+                     ticket: VentoyReadTicket) -> VentoyProbeResult {
         lock.withLock { asked.append((volumeURL, expected)) }
         gate?.wait()
         return lock.withLock { answers[volumeURL] ?? VentoyProbeResult(.unknown("no answer")) }
@@ -677,6 +831,7 @@ final class VentoyVersionStoreTests: XCTestCase {
         store.updateEngine = engine
         let drive = try store.registerDrive(at: volume)
         store.scanAndReconcile(driveID: drive.id)
+        await waitUntil { probe.calls.count == 1 }   // running; a copy queued earlier would skip it
         XCTAssertTrue(store.isReadingVentoyVersion(drive))
 
         let source = try TestFiles.write(root.appendingPathComponent("notes.txt"), size: 4096)
@@ -736,18 +891,28 @@ final class VentoyVersionStoreTests: XCTestCase {
 
     // MARK: Cap, disconnects, cleanup
 
-    func testCapReleasesTheHoldButKeepsTheReadAccountedFor() async throws {
+    func testCapKeepsARunningReadsHoldUntilItReturns() async throws {
         let probe = probe([urlA: .known(VentoyVersion("1.1.18")!)], blocking: true)
         let store = await makeStore(probe: probe)
         store.ventoyVersionReadCap = 0.1
+        store.ventoyVersionWaitLimit = 0.3
         let drive = try startRead(store)
-        XCTAssertFalse(store.canEject(drive))
-        await waitUntil { store.canEject(drive) }
+        await waitUntil { probe.calls.count == 1 }   // running, maybe mounted
+        await waitUntil { store.ventoyVersions[drive.id] != nil }
         XCTAssertEqual(store.ventoyVersions[drive.id], .unknown("Reading the Ventoy version took too long"))
-        XCTAssertEqual(store.ventoyProbes.count, 1, "the read is still running")
-        XCTAssertEqual(store.ventoyProbes.values.first?.holdsDevice, false)
+        XCTAssertTrue(store.isReadingVentoyVersion(drive), "past the cap, a running read still holds the stick")
+        XCTAssertFalse(store.canEject(drive))
+        XCTAssertEqual(store.ventoyReadTickets.values.first?.isCancelled, true)
+
+        // A wait that outlives the limit refuses instead of starting.
+        let started = Date()
+        let clear = await store.waitForVentoyVersionReads(driveID: drive.id)
+        XCTAssertFalse(clear)
+        XCTAssertGreaterThanOrEqual(Date().timeIntervalSince(started), 0.25)
+
         // No second read starts next to the one still running.
         store.markDisconnected(volumeUUID: "UUID-A")
+        XCTAssertTrue(store.isReadingVentoyVersion(drive), "an unplug does not drop a running read")
         store.markConnected(drive, info: info(urlA, uuid: "UUID-A"))
         store.scanAndReconcile(driveID: drive.id)
         XCTAssertNil(store.ventoyVersionReads[drive.id])
@@ -756,12 +921,184 @@ final class VentoyVersionStoreTests: XCTestCase {
         await waitUntil { store.ventoyProbes.isEmpty }
         XCTAssertNil(store.ventoyVersions[drive.id], "the late result belongs to no connect")
         XCTAssertEqual(probe.calls.count, 1)
+        XCTAssertTrue(store.canEject(drive))
+        let nowClear = await store.waitForVentoyVersionReads(driveID: drive.id)
+        XCTAssertTrue(nowClear)
+    }
+
+    func testQueuedReadPastItsCapReleasesAndNeverMounts() async throws {
+        // Read A runs and blocks the queue; read B waits behind it.
+        let blocking = probe([urlA: .known(VentoyVersion("1.1.18")!)], blocking: true)
+        let disksB = FakeDisks(ventoySnapshot(volumeUUID: "UUID-B"))
+        let mounterB = FakeMounter()
+        mounterB.config = "set VENTOY_VERSION=\"1.1.18\"\n"
+        let mountRoot = root!
+        var readerB = VentoyVersionReader(disks: disksB, mounter: mounterB)
+        readerB.makeDirectory = {
+            let url = mountRoot.appendingPathComponent("mnt-\(UUID().uuidString)", isDirectory: true)
+            try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+            return url
+        }
+        let store = await makeStore(probe: blocking)
+        store.ventoyVersionReader = RoutingProbe([urlA: blocking, urlB: readerB])
+        store.ventoyVersionReadCap = 0.3
+        let a = try store.registerDrive(at: urlA)
+        store.scanAndReconcile(driveID: a.id)
+        await waitUntil { blocking.calls.count == 1 }
+        let b = try store.registerDrive(at: urlB)
+        store.scanAndReconcile(driveID: b.id)
+        XCTAssertTrue(store.isReadingVentoyVersion(b), "queued, it holds the stick")
+
+        // B's cap passes while it is still queued: its hold goes at once.
+        await waitUntil { !store.isReadingVentoyVersion(b) }
+        XCTAssertTrue(store.isReadingVentoyVersion(a), "A is running and keeps its hold")
+
+        // So a flash may start now...
+        var flashed = ManagedDrive(volumeUUID: "FLASHED", displayName: "Stick", bookmark: Data(),
+                                   capacityBytes: 16_000_000_000)
+        flashed.kind = .flashed
+        store.addDrive(flashed)
+        store.drivesWithOperationsInFlight.insert(flashed.id)
+
+        // ...and when the queue moves on, B never reaches its mount step.
+        blocking.release()
+        await waitUntil { store.ventoyProbes.isEmpty }
+        await drainVentoyQueue()
+        XCTAssertEqual(mounterB.mountCount, 0)
+        XCTAssertEqual(mounterB.identityChecks, 0)
+        XCTAssertEqual(disksB.calls, 0, "nothing was even described")
+        XCTAssertEqual(try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.hasPrefix("mnt-") }, [])
+    }
+
+    func testStartCheckSkipsAReadWhoseDriveGotBusyInTheQueue() async throws {
+        let blocking = probe([urlA: .known(VentoyVersion("1.1.18")!)], blocking: true)
+        let probeB = probe([urlB: .known(VentoyVersion("1.1.18")!)])
+        let store = await makeStore(probe: blocking)
+        store.ventoyVersionReader = RoutingProbe([urlA: blocking, urlB: probeB])
+        let a = try store.registerDrive(at: urlA)
+        store.scanAndReconcile(driveID: a.id)
+        await waitUntil { blocking.calls.count == 1 }
+        let b = try store.registerDrive(at: urlB)
+        store.scanAndReconcile(driveID: b.id)
+        XCTAssertNotNil(store.ventoyVersionReads[b.id])
+        // A copy to B is queued while B's read waits; the read is skipped.
+        store.drivesWithOperationsInFlight.insert(b.id)
+        blocking.release()
+        await waitUntil { store.ventoyProbes.isEmpty }
+        await drainVentoyQueue()
+        XCTAssertTrue(probeB.calls.isEmpty)
+        XCTAssertNil(store.ventoyVersions[b.id], "not read, so it is read later")
+
+        store.drivesWithOperationsInFlight.remove(b.id)
+        await waitUntil { store.ventoyVersions[b.id] != nil }
+        XCTAssertEqual(probeB.calls.count, 1)
+    }
+
+    func testManualCopyIsRefusedWhenAReadOutlivesTheWaitLimit() async throws {
+        let volume = root.appendingPathComponent("VENTOY", isDirectory: true)
+        try FileManager.default.createDirectory(at: volume, withIntermediateDirectories: true)
+        let probe = probe([volume: .known(VentoyVersion("1.1.18")!)], blocking: true)
+        let store = await makeStore(probe: probe, volumes: [volume: info(volume, uuid: "UUID-V")])
+        store.ventoyVersionWaitLimit = 0.2
+        let writer = FakeDriveWriter()
+        let engine = UpdateEngine(store: store, downloads: FakeISOProvider(behaviour: .failure(CocoaError(.fileNoSuchFile))),
+                                  drives: writer)
+        store.updateEngine = engine
+        let drive = try store.registerDrive(at: volume)
+        store.scanAndReconcile(driveID: drive.id)
+        await waitUntil { probe.calls.count == 1 }
+
+        let source = try TestFiles.write(root.appendingPathComponent("notes.txt"), size: 4096)
+        let file = try LocalFile(url: source)
+        let request = UpdateRequest(driveID: drive.id, driveName: "VENTOY", assignmentID: UUID(),
+                                    entryID: "local-file", channelID: "local", title: file.name,
+                                    release: file.release, isLocalFile: true)
+        await engine.enqueueManual(request, sourceFile: source, fileName: file.name)
+        await engine.drain()
+        XCTAssertFalse(FileManager.default.fileExists(atPath: volume.appendingPathComponent("notes.txt").path))
+        XCTAssertEqual(writer.accessBalance, 0, "the drive was not even opened")
+        XCTAssertEqual(store.operations.first?.errorMessage?.contains(AppStore.ventoyReadStuck), true,
+                       store.operations.first?.errorMessage ?? "no message")
+        probe.release()
+    }
+
+    func testFlashCancelledWhileWaitingForAReadWritesNothing() async throws {
+        let store = await makeStore(probe: probe([:]))
+        let flashed = ManagedDrive(volumeUUID: "", displayName: "SanDisk Cruzer Blade", bookmark: Data(),
+                                   assignments: [Assignment(entryID: "arch", channelID: "default")],
+                                   capacityBytes: 32 << 30, kind: .flashed,
+                                   hardwareID: HardwareID(vendorID: 0x0781, productID: 0x5583,
+                                                          serialNumber: "SERIAL-1"),
+                                   lastBSDName: "disk4")
+        store.addDrive(flashed)
+        let iso = try TestFiles.write(root.appendingPathComponent("arch.iso"), size: 64 * 1024)
+        let release = Release(version: VersionToken.parse("2026.08.01")!,
+                              isoURL: URL(string: "https://example.com/arch.iso")!, fileName: "arch.iso",
+                              sha256: nil, sizeBytes: 64 * 1024, checkedAt: Date())
+        let io = FakeFlashDeviceIO(description: FlashDeviceDescription(bsdName: "disk4",
+                                                                       displayName: "SanDisk Cruzer Blade",
+                                                                       sizeBytes: 32 << 30))
+        let engine = FlashEngine(store: store, downloads: FakeISOProvider(behaviour: .file(iso)), io: io,
+                                 hashing: store.hashing)
+        let token = UUID()
+        store.ventoyProbes[token] = VentoyProbeHold(driveID: UUID(), volumeUUID: "UUID-OTHER", wholeDisk: "disk4")
+        let request = FlashRequest(driveID: flashed.id, driveName: flashed.displayName,
+                                   assignmentID: flashed.assignments[0].id, entryID: "arch", channelID: "default",
+                                   title: "Arch Linux", release: release, bsdName: "disk4",
+                                   deviceName: "SanDisk Cruzer Blade", verifyAfterWrite: false)
+        await engine.enqueue(request)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        await engine.cancel(operationID: request.id)
+        store.finishVentoyVersionRead(VentoyProbeResult(.unknown("x")), driveID: UUID(), token: token)
+        await engine.drain()
+        XCTAssertEqual(io.describeCount, 0)
+        XCTAssertTrue(io.written.isEmpty)
+        XCTAssertEqual(store.operations.first?.phase, .cancelled)
+    }
+
+    func testEjectReservesTheDiskSoNoReadStarts() async throws {
+        let probe = probe([urlA: .known(VentoyVersion("1.1.18")!)])
+        let store = await makeStore(probe: probe)
+        store.attachedDevices = [device()]
+        var flashed = ManagedDrive(volumeUUID: "", displayName: "SanDisk Cruzer Blade", bookmark: Data(),
+                                   capacityBytes: 32 << 30)
+        flashed.kind = .flashed
+        flashed.hardwareID = HardwareID(vendorID: 0x0781, productID: 0x5583, serialNumber: "SERIAL-1")
+        store.addDrive(flashed)
+        let gate = EjectGate()
+        store.flashedDiskEjector = { bsdName in
+            gate.record(bsdName)
+            while !gate.isOpen { try? await Task.sleep(nanoseconds: 10_000_000) }
+        }
+        let drive = try store.registerDrive(at: urlA)
+        store.ejectFlashedDrive(driveID: flashed.id)
+        XCTAssertEqual(store.ventoyEjectReservations.count, 1)
+
+        // A scan of the Ventoy volume on that same stick, mid-eject.
+        store.scanAndReconcile(driveID: drive.id)
+        XCTAssertNil(store.ventoyVersionReads[drive.id])
+        XCTAssertTrue(store.ventoyProbes.isEmpty)
+        try? await Task.sleep(nanoseconds: 100_000_000)
+        XCTAssertTrue(probe.calls.isEmpty)
+        XCTAssertEqual(gate.ejected, ["disk4"])
+
+        gate.open()
+        await waitUntil { store.ventoyEjectReservations.isEmpty }
+    }
+
+    private func drainVentoyQueue() async {
+        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
+            AppStore.ventoyVersionQueue.async { done.resume() }
+        }
+        // Let a landing scheduled from the queue run on the main actor.
+        try? await Task.sleep(nanoseconds: 20_000_000)
     }
 
     func testUnregisterDuringAReadStillTracksIt() async throws {
         let probe = probe([urlA: .known(VentoyVersion("1.1.18")!)], blocking: true)
         let store = await makeStore(probe: probe)
         let drive = try startRead(store)
+        await waitUntil { probe.calls.count == 1 }   // running, not just queued
         store.unregisterDrive(id: drive.id)
         XCTAssertNil(store.ventoyVersionReads[drive.id])
         XCTAssertEqual(store.ventoyProbes.count, 1)
@@ -775,6 +1112,7 @@ final class VentoyVersionStoreTests: XCTestCase {
         let probe = probe([urlA: .known(VentoyVersion("1.1.18")!)], blocking: true)
         let store = await makeStore(probe: probe)
         _ = try startRead(store)
+        await waitUntil { probe.calls.count == 1 }   // running, not just queued
         let started = Date()
         await store.drainVentoyVersionReads(timeout: 0.2)
         let waited = Date().timeIntervalSince(started)
@@ -785,13 +1123,14 @@ final class VentoyVersionStoreTests: XCTestCase {
 
     func testQuitDrainsAFinishingReadAndUndoesItsLeftoverMount() async throws {
         let leftover = root.appendingPathComponent("isotope-vtoyefi-L", isDirectory: true)
-        try FileManager.default.createDirectory(at: leftover, withIntermediateDirectories: true)
+        try makePrivateFolder(leftover)
         let probe = probe([:], blocking: true)
         probe.set(VentoyProbeResult(.unknown("cleanup failed"), leftoverMount: leftover), for: urlA)
         let store = await makeStore(probe: probe)
         let mounter = StubMounter(mounted: [leftover])
         store.ventoyMountJanitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
         let drive = try startRead(store)
+        await waitUntil { probe.calls.count == 1 }
         Task { try? await Task.sleep(nanoseconds: 100_000_000); probe.release() }
         await store.drainVentoyVersionReads(timeout: 3)
         XCTAssertTrue(store.ventoyProbes.isEmpty)
@@ -802,10 +1141,29 @@ final class VentoyVersionStoreTests: XCTestCase {
         XCTAssertTrue(store.canEject(try XCTUnwrap(store.drive(id: drive.id))), "Eject is not held forever")
     }
 
+    func testQuitCancelsAQueuedReadSoItNeverStarts() async throws {
+        let blocking = probe([urlA: .known(VentoyVersion("1.1.18")!)], blocking: true)
+        let probeB = probe([urlB: .known(VentoyVersion("1.1.18")!)])
+        let store = await makeStore(probe: blocking)
+        store.ventoyVersionReader = RoutingProbe([urlA: blocking, urlB: probeB])
+        let a = try store.registerDrive(at: urlA)
+        store.scanAndReconcile(driveID: a.id)
+        await waitUntil { blocking.calls.count == 1 }
+        let b = try store.registerDrive(at: urlB)
+        store.scanAndReconcile(driveID: b.id)
+        await store.drainVentoyVersionReads(timeout: 0.1)
+        XCTAssertFalse(store.isReadingVentoyVersion(b), "the queued read is dropped at once")
+        XCTAssertTrue(store.isReadingVentoyVersion(a), "the running one is still accounted for")
+        blocking.release()
+        await waitUntil { store.ventoyProbes.isEmpty }
+        await drainVentoyQueue()
+        XCTAssertTrue(probeB.calls.isEmpty)
+    }
+
     func testLaunchCleansUpLeftoverFolders() async throws {
         let leftover = root.appendingPathComponent("isotope-vtoyefi-M", isDirectory: true)
         let stuck = root.appendingPathComponent("isotope-vtoyefi-N", isDirectory: true)
-        for url in [leftover, stuck] { try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true) }
+        for url in [leftover, stuck] { try makePrivateFolder(url) }
         let store = await makeStore(probe: probe([:]))
         let mounter = StubMounter(mounted: [leftover, stuck], stuck: [stuck])
         store.ventoyMountJanitor = VentoyMountJanitor(mounter: mounter, temporaryDirectory: root)
@@ -830,9 +1188,14 @@ private final class StubMounter: PartitionMounting, @unchecked Sendable {
 
     var unmounted: [URL] { lock.withLock { unmountedList } }
 
-    func mountReadOnly(devicePath: String, at directory: URL,
+    func mountReadOnly(devicePath: String, at directory: URL, allowsDiskutilFallback: Bool,
                        isStillSameDevice: () -> Bool) -> VentoyMountOutcome { .failed }
     func isMounted(at directory: URL) -> Bool { lock.withLock { mounted.contains(directory) } }
+    func mountInfo(at directory: URL) -> VentoyMountInfo? {
+        guard isMounted(at: directory) else { return nil }
+        return VentoyMountInfo(mountedOn: directory.path, mountedFrom: "disk4s2", fileSystem: "msdos",
+                               isReadOnly: true)
+    }
     func unmount(directory: URL) -> Bool {
         lock.withLock {
             guard !stuck.contains(directory) else { return false }
@@ -841,4 +1204,32 @@ private final class StubMounter: PartitionMounting, @unchecked Sendable {
             return true
         }
     }
+}
+
+/// A folder the way the reader makes its own: mode 0700.
+func makePrivateFolder(_ url: URL) throws {
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true,
+                                            attributes: [.posixPermissions: 0o700])
+}
+
+/// Sends each read to the probe for its volume.
+final class RoutingProbe: VentoyVersionProbing, @unchecked Sendable {
+    private let routes: [URL: VentoyVersionProbing]
+    init(_ routes: [URL: VentoyVersionProbing]) { self.routes = routes }
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity,
+                     ticket: VentoyReadTicket) -> VentoyProbeResult {
+        routes[volumeURL]?.readVersion(volumeURL: volumeURL, expected: expected, ticket: ticket)
+            ?? VentoyProbeResult(.unknown("no route"))
+    }
+}
+
+/// Holds a fake eject open until the test lets it finish.
+private final class EjectGate: @unchecked Sendable {
+    private let lock = NSLock()
+    private var opened = false
+    private var names: [String] = []
+    var isOpen: Bool { lock.withLock { opened } }
+    var ejected: [String] { lock.withLock { names } }
+    func open() { lock.withLock { opened = true } }
+    func record(_ name: String) { lock.withLock { names.append(name) } }
 }

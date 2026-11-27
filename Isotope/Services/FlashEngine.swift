@@ -182,7 +182,16 @@ actor FlashEngine {
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
         // PRD F74: not while a Ventoy read has a partition of this device mounted.
-        await store.waitForVentoyVersionReads(driveID: request.driveID, bsdName: request.bsdName)
+        guard await store.waitForVentoyVersionReads(driveID: request.driveID, bsdName: request.bsdName) else {
+            await store.finishFlashOperation(request: request,
+                                             result: .failure(.downloadFailed(AppStore.ventoyReadStuck)))
+            return
+        }
+        // A cancel during that wait: nothing has been written yet.
+        if cancellations[request.id]?.isSet == true {
+            await store.finishFlashOperation(request: request, result: .failure(.cancelled))
+            return
+        }
         do {
             let flashed = try await execute(request)
             await store.finishFlashOperation(request: request, result: .success(flashed))

@@ -180,7 +180,16 @@ actor UpdateEngine {
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
         // PRD F74: not while the drive's Ventoy partition is mounted for a read.
-        await store.waitForVentoyVersionReads(driveID: request.driveID)
+        guard await store.waitForVentoyVersionReads(driveID: request.driveID) else {
+            await store.finishOperation(request: request, result: .failure(.copyFailed(AppStore.ventoyReadStuck)))
+            return
+        }
+        // A cancel during that wait: the request had already left `waiting`,
+        // so nothing else stops it before `place` reclaims space.
+        if cancellations[request.id]?.isSet == true {
+            await store.finishOperation(request: request, result: .failure(.cancelled))
+            return
+        }
         do {
             let placed = try await executeManual(request, sourceFile: sourceFile, fileName: fileName)
             await store.finishOperation(request: request, result: .success(placed))
@@ -237,7 +246,10 @@ actor UpdateEngine {
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
         // PRD F74: not while the drive's Ventoy partition is mounted for a read.
-        await store.waitForVentoyVersionReads(driveID: request.driveID)
+        guard await store.waitForVentoyVersionReads(driveID: request.driveID) else {
+            await store.finishOperation(request: request, result: .failure(.copyFailed(AppStore.ventoyReadStuck)))
+            return
+        }
         if cancellations[request.id]?.isSet == true {
             await store.finishOperation(request: request, result: .failure(.cancelled))
             return
@@ -506,6 +518,8 @@ actor UpdateEngine {
         // the user's Downloads folder, never this file, so removing it here
         // cannot take the copy's own input with it.
         var removedEarly = false
+        // The last moment a cancel can still leave the drive exactly as it was.
+        if cancellations[request.id]?.isSet == true { throw UpdateError.cancelled }
         if plan.requiresReclaimFirst, let replacedURL {
             try? manager.removeItem(at: replacedURL)
             removedEarly = true

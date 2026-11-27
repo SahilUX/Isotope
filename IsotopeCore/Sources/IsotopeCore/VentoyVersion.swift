@@ -166,6 +166,15 @@ public enum VentoyEFIPartitionRule {
             || content.caseInsensitiveCompare("EFI") == .orderedSame
     }
 
+    /// True for the GPT EFI System partition type (Ventoy's GPT option), as
+    /// opposed to MBR type 0xEF. DiskArbitration reports it as the GUID or as
+    /// "EFI".
+    public static func isGPTEFIType(_ content: String?) -> Bool {
+        guard let content = content?.trimmingCharacters(in: .whitespaces) else { return false }
+        return content.caseInsensitiveCompare(gptEFISystemGUID) == .orderedSame
+            || content.caseInsensitiveCompare("EFI") == .orderedSame
+    }
+
     /// Why this partition must not be mounted, or nil when it may be. The
     /// drive's volume must be partition 1 and the candidate partition 2 of the
     /// same whole disk, and that disk must pass the same gate as registration

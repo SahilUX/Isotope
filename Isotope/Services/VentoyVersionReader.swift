@@ -17,7 +17,13 @@ protocol VentoyVersionProbing: Sendable {
     /// Blocking (it may mount a partition and wait on `mount`/`umount`); the
     /// store runs it on its own serial queue, never on the main actor or
     /// Swift's shared task threads.
-    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult
+    ///
+    /// `ticket` is checked before anything is described or mounted and again
+    /// immediately before every mount attempt: a cancelled ticket ends the
+    /// read with `.unknown(VentoyReadTicket.cancelledReason)` and nothing
+    /// mounted.
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity,
+                     ticket: VentoyReadTicket) -> VentoyProbeResult
     /// False for a reader that never reads: the store then starts no read
     /// and holds nothing.
     var isEnabled: Bool { get }
@@ -25,6 +31,53 @@ protocol VentoyVersionProbing: Sendable {
 
 extension VentoyVersionProbing {
     var isEnabled: Bool { true }
+}
+
+/// One read's cancellation ticket (DESIGN §21), shared between the store on
+/// the main actor and the read on `AppStore.ventoyVersionQueue`.
+///
+/// A read is queued until the store's start check (on the main actor, when
+/// the work leaves the queue) activates it. Cancelling a queued ticket is
+/// final: it can never become active, so nothing will be mounted and the
+/// store may release the device at once. Cancelling an active ticket only
+/// asks the read to stop before its next mount attempt; the store keeps the
+/// device held until the read has actually returned and cleaned up.
+final class VentoyReadTicket: @unchecked Sendable {
+    enum State: Equatable, Sendable { case queued, active, finished }
+
+    static let cancelledReason = "cancelled"
+
+    private let lock = NSLock()
+    private var stateValue: State = .queued
+    private var cancelled = false
+
+    init() {}
+
+    var state: State { lock.withLock { stateValue } }
+    var isCancelled: Bool { lock.withLock { cancelled } }
+
+    /// Queued → active. False, and the read must not start, if it was
+    /// cancelled first (or already ran).
+    func activate() -> Bool {
+        lock.withLock {
+            guard stateValue == .queued, !cancelled else { return false }
+            stateValue = .active
+            return true
+        }
+    }
+
+    /// Asks the read to stop. True when nothing can be mounted under this
+    /// ticket any more (it never started, or it has finished), so the hold
+    /// can go now; false while the read is active and may have a mount.
+    @discardableResult
+    func cancel() -> Bool {
+        lock.withLock {
+            cancelled = true
+            return stateValue != .active
+        }
+    }
+
+    func finish() { lock.withLock { stateValue = .finished } }
 }
 
 /// What the store knows about the drive before the read starts. The reader
@@ -112,14 +165,35 @@ enum VentoyMountOutcome: Equatable, Sendable {
 /// The mount half, injectable for the same reason.
 protocol PartitionMounting: Sendable {
     /// Mounts `devicePath` read-only at `directory`, calling `isStillSameDevice`
-    /// immediately before each attempt and stopping if it says no.
-    func mountReadOnly(devicePath: String, at directory: URL,
+    /// immediately before each attempt and stopping if it says no. The
+    /// `diskutil` fallback runs only when `allowsDiskutilFallback` (GPT).
+    func mountReadOnly(devicePath: String, at directory: URL, allowsDiskutilFallback: Bool,
                        isStillSameDevice: () -> Bool) -> VentoyMountOutcome
     /// Whether anything is mounted at `directory` right now.
     func isMounted(at directory: URL) -> Bool
+    /// What is mounted at `directory`, as `statfs` reports it, or nil.
+    func mountInfo(at directory: URL) -> VentoyMountInfo?
     /// Unmounts whatever is at `directory`. True when nothing is mounted
     /// there afterwards.
     func unmount(directory: URL) -> Bool
+}
+
+/// A mount as `statfs` describes it (`f_mntonname`, `f_mntfromname`,
+/// `f_fstypename`, `MNT_RDONLY`).
+struct VentoyMountInfo: Equatable, Sendable {
+    var mountedOn: String
+    var mountedFrom: String
+    var fileSystem: String
+    var isReadOnly: Bool
+}
+
+/// A folder entry as `lstat` describes it: a symlink is never followed.
+struct VentoyFolderEntry: Equatable, Sendable {
+    var isDirectory: Bool
+    var isSymlink: Bool
+    var ownerUID: uid_t
+    /// Permission bits only (`st_mode & 0o7777`).
+    var permissions: UInt16
 }
 
 struct VentoyVersionReader: VentoyVersionProbing {
@@ -155,7 +229,23 @@ struct VentoyVersionReader: VentoyVersionProbing {
     /// folder is still a mount point and must not be emptied.
     var removeDirectory: @Sendable (URL) -> Void = { url in _ = VentoyMountJanitor.rmdir(url) }
 
-    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult {
+    /// The longest an active read can take in the processes it runs (DESIGN
+    /// §21): the mount attempts, an unmount of a mount that came back
+    /// writable, and the unmount after the read, each tool bounded by
+    /// `ProcessRunner`. DiskArbitration calls and the 1 MiB read are not
+    /// process-bounded; a margin covers them on a healthy disk, and a store
+    /// waiting longer than this treats the read as stuck.
+    static var activeReadBound: TimeInterval {
+        let tool = LivePartitionMounter.toolBound
+        let mounts = Double(LivePartitionMounter.maximumMountAttempts) * tool
+        let unmounts = 2 * Double(LivePartitionMounter.unmountSteps) * tool
+        return mounts + unmounts + 8
+    }
+
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity,
+                     ticket: VentoyReadTicket) -> VentoyProbeResult {
+        let cancelled = VentoyProbeResult(.unknown(VentoyReadTicket.cancelledReason))
+        guard !ticket.isCancelled else { return cancelled }
         guard let first = disks.snapshot(forVolumeAt: volumeURL) else {
             return VentoyProbeResult(.unknown("The drive's disk could not be identified"))
         }
@@ -171,14 +261,23 @@ struct VentoyVersionReader: VentoyVersionProbing {
         if let mounted = first.efi.mountPoint {
             return VentoyProbeResult(parse(at: mounted))
         }
+        guard !ticket.isCancelled else { return cancelled }
         guard let directory = makeDirectory() else {
             return VentoyProbeResult(.unknown("No temporary folder to mount the Ventoy EFI partition in"))
         }
         let isStillSameDevice = {
             disks.snapshot(forVolumeAt: volumeURL).map { $0.isSameDevice(as: first) } ?? false
         }
-        let outcome = mounter.mountReadOnly(devicePath: first.efi.devicePath, at: directory,
-                                            isStillSameDevice: isStillSameDevice)
+        // Checked immediately before every mount attempt: the ticket first, so
+        // a cancelled read never mounts, then the device.
+        let mayMount = { !ticket.isCancelled && isStillSameDevice() }
+        // diskutil's readOnly mount is only needed, and only used, on GPT
+        // (DESIGN §21): it is unconfirmed whether its fsck pass could repair a
+        // dirty FAT volume, and on MBR `mount -F` is the path that works.
+        let outcome = mounter.mountReadOnly(
+            devicePath: first.efi.devicePath, at: directory,
+            allowsDiskutilFallback: VentoyEFIPartitionRule.isGPTEFIType(first.efi.candidate.content),
+            isStillSameDevice: mayMount)
         let reading: VentoyVersionReading
         switch outcome {
         case .mounted:
@@ -187,7 +286,9 @@ struct VentoyVersionReader: VentoyVersionProbing {
                 ? parse(at: directory)
                 : .unknown("Not read: the drive changed while its Ventoy partition was being mounted")
         case .identityChanged:
-            reading = .unknown("Not read: the drive changed before its Ventoy partition was mounted")
+            reading = ticket.isCancelled
+                ? .unknown(VentoyReadTicket.cancelledReason)
+                : .unknown("Not read: the drive changed before its Ventoy partition was mounted")
         case .failed:
             reading = .unknown("The Ventoy EFI partition could not be mounted read-only")
         }
@@ -234,7 +335,8 @@ struct VentoyVersionReader: VentoyVersionProbing {
 /// Used under XCTest and wherever reading is not wanted: never touches a disk.
 struct DisabledVentoyVersionReader: VentoyVersionProbing {
     var isEnabled: Bool { false }
-    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult {
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity,
+                     ticket: VentoyReadTicket) -> VentoyProbeResult {
         VentoyProbeResult(.unknown("Not read"))
     }
 }
@@ -244,33 +346,109 @@ struct DisabledVentoyVersionReader: VentoyVersionProbing {
 /// Finds and undoes temporary VTOYEFI mounts: the ones a read could not
 /// unmount, and at launch any `isotope-vtoyefi-*` folder a crash left behind.
 /// A folder is only ever `rmdir`ed, never deleted recursively.
+///
+/// It unmounts nothing it cannot prove is its own (DESIGN §21): the entry
+/// must be a real directory (`lstat`, so a symlink is never followed) directly
+/// in the temporary directory, owned by this user, mode 0700; and what is
+/// mounted there must be mounted on exactly that path, read-only, FAT
+/// (`msdos`), from a partition 2 (`diskNs2`). Anything else is left alone and
+/// logged.
 struct VentoyMountJanitor: Sendable {
     var mounter: PartitionMounting = LivePartitionMounter()
     var temporaryDirectory: URL = FileManager.default.temporaryDirectory
     var removeDirectory: @Sendable (URL) -> Bool = { VentoyMountJanitor.rmdir($0) }
+    var inspectEntry: @Sendable (URL) -> VentoyFolderEntry? = { VentoyMountJanitor.lstatEntry($0) }
+    var currentUID: uid_t = getuid()
 
-    /// `isotope-vtoyefi-*` folders in the temporary directory.
+    /// `isotope-vtoyefi-*` entries in the temporary directory. `cleanUp`
+    /// decides whether each one is really ours.
     func leftovers() -> [URL] {
         let names = (try? FileManager.default.contentsOfDirectory(atPath: temporaryDirectory.path)) ?? []
         return names.filter { $0.hasPrefix(VentoyVersionReader.directoryPrefix) }
             .map { temporaryDirectory.appendingPathComponent($0, isDirectory: true) }
     }
 
-    /// Unmounts `directory` if something is mounted there, then removes the
-    /// empty folder. True when the folder is gone.
+    /// Unmounts `directory` if our own mount is there, then removes the empty
+    /// folder. True when the folder is gone.
     @discardableResult
     func cleanUp(_ directory: URL) -> Bool {
-        if mounter.isMounted(at: directory), !mounter.unmount(directory: directory) {
-            VentoyVersionReader.log.error("Leftover Ventoy mount at \(directory.path, privacy: .public) could not be unmounted")
+        if let refusal = folderRefusal(directory) {
+            VentoyVersionReader.log.error("Left \(directory.path, privacy: .public) alone: \(refusal, privacy: .public)")
             return false
+        }
+        if mounter.isMounted(at: directory) {
+            guard let info = mounter.mountInfo(at: directory) else {
+                VentoyVersionReader.log.error("Left \(directory.path, privacy: .public) alone: its mount could not be described")
+                return false
+            }
+            if let refusal = Self.mountRefusal(info, at: directory) {
+                VentoyVersionReader.log.error("Left \(directory.path, privacy: .public) alone: \(refusal, privacy: .public)")
+                return false
+            }
+            guard mounter.unmount(directory: directory) else {
+                VentoyVersionReader.log.error("Leftover Ventoy mount at \(directory.path, privacy: .public) could not be unmounted")
+                return false
+            }
         }
         return removeDirectory(directory)
     }
 
-    /// The folders that could not be cleaned up.
+    /// The folders that could not be cleaned up (or were not ours).
     @discardableResult
     func cleanUpLeftovers() -> [URL] {
         leftovers().filter { !cleanUp($0) }
+    }
+
+    /// Why `directory` is not one of our own temporary folders, or nil.
+    func folderRefusal(_ directory: URL) -> String? {
+        guard directory.lastPathComponent.hasPrefix(VentoyVersionReader.directoryPrefix),
+              Self.canonicalPath(directory.deletingLastPathComponent().path)
+                == Self.canonicalPath(temporaryDirectory.path) else {
+            return "not an Isotope folder in the temporary directory"
+        }
+        guard let entry = inspectEntry(directory) else { return "it could not be described" }
+        if entry.isSymlink { return "it is a symbolic link" }
+        guard entry.isDirectory else { return "it is not a folder" }
+        guard entry.ownerUID == currentUID else { return "it is owned by another user" }
+        guard entry.permissions == 0o700 else { return "its permissions are not 0700" }
+        return nil
+    }
+
+    /// Why the mount at `directory` is not a VTOYEFI mount of ours, or nil.
+    static func mountRefusal(_ info: VentoyMountInfo, at directory: URL) -> String? {
+        guard canonicalPath(info.mountedOn) == canonicalPath(directory.path) else {
+            return "the folder is not itself a mount point"
+        }
+        guard info.isReadOnly else { return "the mount is writable" }
+        guard info.fileSystem.caseInsensitiveCompare("msdos") == .orderedSame else {
+            return "the mount is not FAT"
+        }
+        guard isPartitionTwo(info.mountedFrom) else { return "the mount is not a partition 2" }
+        return nil
+    }
+
+    /// "/dev/disk4s2", "disk4s2" (FSKit reports either).
+    static func isPartitionTwo(_ device: String) -> Bool {
+        let name = device.hasPrefix("/dev/") ? String(device.dropFirst(5)) : device
+        guard name.hasPrefix("disk"), name.hasSuffix("s2") else { return false }
+        let number = name.dropFirst(4).dropLast(2)
+        return !number.isEmpty && number.allSatisfy { $0.isASCII && $0.isNumber }
+    }
+
+    /// `realpath`, so "/var/folders/…" and statfs's "/private/var/folders/…"
+    /// compare equal. The leaf was already checked not to be a symlink.
+    static func canonicalPath(_ path: String) -> String {
+        guard let resolved = realpath(path, nil) else { return path }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    static func lstatEntry(_ url: URL) -> VentoyFolderEntry? {
+        var info = stat()
+        guard lstat(url.path, &info) == 0 else { return nil }
+        let type = info.st_mode & S_IFMT
+        return VentoyFolderEntry(isDirectory: type == S_IFDIR, isSymlink: type == S_IFLNK,
+                                 ownerUID: info.st_uid, permissions: UInt16(info.st_mode & 0o7777))
     }
 
     static func rmdir(_ url: URL) -> Bool {
@@ -340,17 +518,28 @@ struct LiveVentoyDiskInspector: VentoyDiskInspecting {
 /// requested read-only, and a mount that comes back writable is undone at once.
 struct LivePartitionMounter: PartitionMounting {
     static let timeout: TimeInterval = 10
+    /// The longest one tool can hold a read: its timeout, then SIGTERM's and
+    /// SIGKILL's grace periods, after which it is abandoned.
+    static var toolBound: TimeInterval {
+        timeout + ProcessRunner.terminateGrace + ProcessRunner.killGrace
+    }
+    /// `mount -F`, then `diskutil mount readOnly` on GPT only.
+    static let maximumMountAttempts = 2
+    /// `umount`, `umount`, `diskutil unmount force`.
+    static let unmountSteps = 3
 
-    func mountReadOnly(devicePath: String, at directory: URL,
+    func mountReadOnly(devicePath: String, at directory: URL, allowsDiskutilFallback: Bool,
                        isStillSameDevice: () -> Bool) -> VentoyMountOutcome {
-        let attempts: [(String, [String])] = [
+        var attempts: [(String, [String])] = [
             // FSKit's msdos module: works as a plain user where the kext
             // would need loading (DESIGN §21).
             ("/sbin/mount", ["-F", "-t", "msdos", "-o", "rdonly,nobrowse,nodev,nosuid,noexec",
                              devicePath, directory.path]),
-            ("/usr/sbin/diskutil", ["mount", "readOnly", "nobrowse", "-mountPoint", directory.path,
-                                    devicePath]),
         ]
+        if allowsDiskutilFallback {
+            attempts.append(("/usr/sbin/diskutil", ["mount", "readOnly", "nobrowse", "-mountPoint",
+                                                    directory.path, devicePath]))
+        }
         for (tool, arguments) in attempts {
             guard isStillSameDevice() else { return .identityChanged }
             let outcome = ProcessRunner.run(tool, arguments, timeout: Self.timeout)
@@ -368,6 +557,19 @@ struct LivePartitionMounter: PartitionMounting {
             }
         }
         return .failed
+    }
+
+    func mountInfo(at directory: URL) -> VentoyMountInfo? {
+        guard isMounted(at: directory), var info = Self.statfsOf(directory) else { return nil }
+        func string<T>(_ field: inout T, _ capacity: Int) -> String {
+            withUnsafePointer(to: &field) { pointer in
+                pointer.withMemoryRebound(to: CChar.self, capacity: capacity) { String(cString: $0) }
+            }
+        }
+        return VentoyMountInfo(mountedOn: string(&info.f_mntonname, Int(MAXPATHLEN)),
+                               mountedFrom: string(&info.f_mntfromname, Int(MAXPATHLEN)),
+                               fileSystem: string(&info.f_fstypename, Int(MFSTYPENAMELEN)),
+                               isReadOnly: info.f_flags & UInt32(MNT_RDONLY) != 0)
     }
 
     func isMounted(at directory: URL) -> Bool {

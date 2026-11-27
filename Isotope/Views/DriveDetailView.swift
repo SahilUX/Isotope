@@ -400,7 +400,7 @@ private struct VentoySecureBootNotice: View {
     let version: VentoyVersion?
 
     var body: some View {
-        Label("This drive has Ventoy \(version.map(String.init(describing:)) ?? ""). Ventoy 1.1.14 and later boot with Secure Boot on PCs that trust only Microsoft's 2023 UEFI CA; older releases may not. Update Ventoy with Ventoy2Disk, then enrol Ventoy's new key the first time you boot it. Isotope does not update Ventoy itself.",
+        Label("This drive has Ventoy \(version.map(String.init(describing:)) ?? ""). Ventoy 1.1.14 updated its Secure Boot shim for the UEFI CA 2023 change; older releases may not boot with Secure Boot on newer PCs. Update Ventoy with Ventoy2Disk, then enrol Ventoy's new key the first time you boot it. Isotope does not update Ventoy itself.",
               systemImage: "exclamationmark.shield.fill")
             .font(.callout)
             .foregroundStyle(.orange)
