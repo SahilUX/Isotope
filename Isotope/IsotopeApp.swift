@@ -35,6 +35,8 @@ struct IsotopeApp: App {
                     if launch.routesNotifications { installNotificationRouting() }
                     // Volumes first: a drive that is already plugged in should be
                     // connected and scanned before the catalog sweep lands (F3/F7).
+                    // PRD F74: undo any VTOYEFI mount an earlier run left.
+                    if launch.startsDriveMonitor { store.cleanUpLeftoverVentoyMounts() }
                     if launch.startsDriveMonitor { monitor.start() }
                     if launch.startsPeriodicRefresh { store.startPeriodicRefresh() }
                     if launch.refreshesCatalogAtLaunch {

@@ -335,6 +335,7 @@ private struct DriveHeader: View {
                 Spacer()
                 Button("Eject", systemImage: "eject") { onEject() }
                     .disabled(info == nil || !store.canEject(drive))
+                    .help(store.isReadingVentoyVersion(drive) ? AppStore.ventoyReadFinishing : "")
             }
             Text(connectionSummary)
                 .font(.caption)
@@ -399,7 +400,7 @@ private struct VentoySecureBootNotice: View {
     let version: VentoyVersion?
 
     var body: some View {
-        Label("Ventoy \(version.map(String.init(describing:)) ?? "") is older than 1.1.14, which uses the old Secure Boot CA and may not boot on PCs that have revoked it. Update Ventoy on this drive with Ventoy2Disk. Isotope does not update Ventoy itself.",
+        Label("This drive has Ventoy \(version.map(String.init(describing:)) ?? ""). Ventoy 1.1.14 and later boot with Secure Boot on PCs that trust only Microsoft's 2023 UEFI CA; older releases may not. Update Ventoy with Ventoy2Disk, then enrol Ventoy's new key the first time you boot it. Isotope does not update Ventoy itself.",
               systemImage: "exclamationmark.shield.fill")
             .font(.callout)
             .foregroundStyle(.orange)

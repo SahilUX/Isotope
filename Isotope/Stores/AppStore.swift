@@ -72,9 +72,20 @@ final class AppStore {
     var ventoyVersions: [UUID: VentoyVersionReading] = [:]
     /// Reads in progress, each with the token of the connect it belongs to.
     var ventoyVersionReads: [UUID: UUID] = [:]
+    /// Every read that has started and not returned, by token, with the device
+    /// it holds. Outlives an unplug or unregister, so no read is lost track of.
+    var ventoyProbes: [UUID: VentoyProbeHold] = [:]
+    /// Temporary VTOYEFI mounts a read could not undo; retried at quit.
+    var ventoyLeftoverMounts: Set<URL> = []
+    /// After this long the store stops waiting for a read and releases its
+    /// hold on the device (DESIGN §21).
+    var ventoyVersionReadCap: TimeInterval = 60
     /// Mounts VTOYEFI read-only; never under XCTest, where tests inject a fake.
     var ventoyVersionReader: VentoyVersionProbing =
         LaunchEnvironment.isRunningUnderTest ? DisabledVentoyVersionReader() : VentoyVersionReader()
+    /// Undoes leftover temporary mounts; nil under XCTest unless a test sets one.
+    var ventoyMountJanitor: VentoyMountJanitor? =
+        LaunchEnvironment.isRunningUnderTest ? nil : VentoyMountJanitor()
 
     // Flashed drives (PRD §8). Written by `DriveMonitor`'s device watcher and
     // the flash pipeline in AppStore+Flash.swift.
@@ -169,9 +180,14 @@ final class AppStore {
     /// relaunch can carry on. Called from `applicationShouldTerminate`.
     func prepareForQuit() async {
         stopPeriodicRefresh()
-        guard let downloads = downloadManager else { return }
-        await downloads.suspendForQuit()
+        // PRD F74: a VTOYEFI read still running gets a moment to unmount.
+        async let ventoy: Void = drainVentoyVersionReads(timeout: Self.ventoyQuitTimeout)
+        if let downloads = downloadManager { await downloads.suspendForQuit() }
+        await ventoy
     }
+
+    /// Inside `AppDelegate.quitTimeout`, which ends the quit regardless.
+    static let ventoyQuitTimeout: TimeInterval = 2
 
     func stopPeriodicRefresh() {
         periodicRefresh?.cancel()

@@ -103,12 +103,29 @@ final class VentoyVersionTests: XCTestCase {
     private func candidate(dataWholeDisk: String = "disk4", partition: String = "disk4s2",
                            partitionWhole: String = "disk4", size: Int64 = 32 * 1024 * 1024,
                            content: String? = "0xEF", isUSB: Bool = true, isExternal: Bool = true,
-                           isBootDisk: Bool = false, diskName: String = "disk4") -> VentoyEFIPartitionCandidate {
+                           isBootDisk: Bool = false, diskName: String = "disk4",
+                           dataPartition: String? = "disk4s1",
+                           volumeName: String? = nil) -> VentoyEFIPartitionCandidate {
         VentoyEFIPartitionCandidate(
             dataWholeDisk: dataWholeDisk, partitionBSDName: partition, partitionWholeDisk: partitionWhole,
             sizeBytes: size, content: content,
             disk: FlashDeviceDescription(bsdName: diskName, displayName: "Stick", sizeBytes: 64_000_000_000,
-                                         isExternal: isExternal, isUSB: isUSB, isBootDisk: isBootDisk))
+                                         isExternal: isExternal, isUSB: isUSB, isBootDisk: isBootDisk),
+            dataPartitionBSDName: dataPartition, volumeName: volumeName)
+    }
+
+    func testRefusesDataVolumeThatIsNotPartitionOne() {
+        XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(dataPartition: nil)))
+        XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(dataPartition: "disk4s3")))
+        XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(dataPartition: "disk5s1")))
+    }
+
+    func testNameMustBeVTOYEFIWhenReported() {
+        XCTAssertNil(VentoyEFIPartitionRule.refusal(for: candidate(volumeName: "VTOYEFI")))
+        XCTAssertNil(VentoyEFIPartitionRule.refusal(for: candidate(volumeName: "vtoyefi")))
+        XCTAssertNil(VentoyEFIPartitionRule.refusal(for: candidate(volumeName: "")))
+        XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(volumeName: "EFI")))
+        XCTAssertNotNil(VentoyEFIPartitionRule.refusal(for: candidate(volumeName: "BOOTCAMP")))
     }
 
     func testAcceptsMBRAndGPTVentoyPartition() {

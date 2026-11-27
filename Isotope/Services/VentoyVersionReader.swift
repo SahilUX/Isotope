@@ -1,6 +1,7 @@
 import DiskArbitration
 import Foundation
 import IsotopeCore
+import os
 
 /// Reads which Ventoy release is installed on a connected Ventoy drive
 /// (PRD F74, DESIGN §21).
@@ -13,8 +14,42 @@ import IsotopeCore
 /// `.unknown(reason)`: the version is a nicety, and a read that cannot happen
 /// cleanly does not happen.
 protocol VentoyVersionProbing: Sendable {
-    /// Blocking (it may mount a partition); callers run it off the main actor.
-    func readVersion(volumeURL: URL) -> VentoyVersionReading
+    /// Blocking (it may mount a partition and wait on `mount`/`umount`); the
+    /// store runs it on its own serial queue, never on the main actor or
+    /// Swift's shared task threads.
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult
+    /// False for a reader that never reads: the store then starts no read
+    /// and holds nothing.
+    var isEnabled: Bool { get }
+}
+
+extension VentoyVersionProbing {
+    var isEnabled: Bool { true }
+}
+
+/// What the store knows about the drive before the read starts. The reader
+/// refuses to mount anything unless the volume at `volumeURL` is still this
+/// drive on this disk.
+struct VentoyExpectedIdentity: Equatable, Sendable {
+    /// The registered data volume's UUID.
+    var volumeUUID: String
+    /// The whole disk the device list has that volume on ("disk4"), if known.
+    var wholeDisk: String?
+    /// That whole disk's USB identity, if the device list has one.
+    var hardwareID: HardwareID?
+}
+
+struct VentoyProbeResult: Equatable, Sendable {
+    var reading: VentoyVersionReading
+    /// A temporary mount the reader could not undo. The store keeps it and
+    /// tries again at quit and at the next launch; a whole-disk eject
+    /// unmounts it too.
+    var leftoverMount: URL?
+
+    init(_ reading: VentoyVersionReading, leftoverMount: URL? = nil) {
+        self.reading = reading
+        self.leftoverMount = leftoverMount
+    }
 }
 
 /// Partition 2 of the disk a Ventoy data volume lives on, as DiskArbitration
@@ -26,19 +61,60 @@ struct VentoyEFIPartitionInfo: Equatable, Sendable {
     var devicePath: String { "/dev/\(candidate.partitionBSDName)" }
 }
 
+/// A whole disk's DiskArbitration media identity. A BSD name alone is not an
+/// identity: macOS hands "disk4" to the next disk that appears.
+struct VentoyDiskIdentity: Equatable, Sendable {
+    var bsdName: String
+    var mediaUUID: String?
+    /// The IOKit registry path of the media (`DAMediaPath`).
+    var mediaPath: String?
+    /// The IOKit registry path of the device (`DADevicePath`).
+    var devicePath: String?
+    var hardwareID: HardwareID?
+}
+
+/// One look at the drive as DiskArbitration describes it right now: the data
+/// volume at the URL, its whole disk and that disk's partition 2.
+struct VentoyDiskSnapshot: Equatable, Sendable {
+    /// "disk4s1".
+    var dataPartitionBSDName: String
+    var dataVolumeUUID: String?
+    var wholeDisk: VentoyDiskIdentity
+    var efi: VentoyEFIPartitionInfo
+
+    /// The same volume, disk and partition as `other`. Where partition 2 is
+    /// mounted is left out: the reader's own mount changes it.
+    func isSameDevice(as other: VentoyDiskSnapshot) -> Bool {
+        dataPartitionBSDName == other.dataPartitionBSDName
+            && dataVolumeUUID?.uppercased() == other.dataVolumeUUID?.uppercased()
+            && wholeDisk == other.wholeDisk
+            && efi.candidate == other.efi.candidate
+    }
+}
+
 /// The DiskArbitration half, injectable so tests never touch a real disk.
 protocol VentoyDiskInspecting: Sendable {
-    /// "disk4" for a volume mounted from /dev/disk4s1.
-    func wholeDisk(forVolumeAt url: URL) -> String?
-    /// `<wholeDisk>s2`, described, or nil when there is no such partition.
-    func partitionTwo(ofWholeDisk wholeDisk: String) -> VentoyEFIPartitionInfo?
+    /// A fresh description, or nil when the volume, its disk or partition 2
+    /// cannot be described.
+    func snapshot(forVolumeAt url: URL) -> VentoyDiskSnapshot?
+}
+
+/// What a mount attempt came to.
+enum VentoyMountOutcome: Equatable, Sendable {
+    /// Mounted read-only at the directory.
+    case mounted
+    case failed
+    /// A re-check before an attempt found a different device; nothing was
+    /// attempted after it.
+    case identityChanged
 }
 
 /// The mount half, injectable for the same reason.
 protocol PartitionMounting: Sendable {
-    /// Mounts `devicePath` read-only at `directory`. True only when the
-    /// partition is now mounted there, read-only.
-    func mountReadOnly(devicePath: String, at directory: URL) -> Bool
+    /// Mounts `devicePath` read-only at `directory`, calling `isStillSameDevice`
+    /// immediately before each attempt and stopping if it says no.
+    func mountReadOnly(devicePath: String, at directory: URL,
+                       isStillSameDevice: () -> Bool) -> VentoyMountOutcome
     /// Whether anything is mounted at `directory` right now.
     func isMounted(at directory: URL) -> Bool
     /// Unmounts whatever is at `directory`. True when nothing is mounted
@@ -50,6 +126,10 @@ struct VentoyVersionReader: VentoyVersionProbing {
     /// `grub.cfg` is about 100 KB; anything past this is not Ventoy's.
     static let maximumConfigBytes = 1 << 20
     static let configPath = "grub/grub.cfg"
+    /// Temporary mount folders are named with this prefix, so a launch can
+    /// find any a crash left behind.
+    static let directoryPrefix = "isotope-vtoyefi-"
+    static let log = Logger(subsystem: "Isotope", category: "VentoyVersion")
 
     var disks: VentoyDiskInspecting = LiveVentoyDiskInspector()
     var mounter: PartitionMounting = LivePartitionMounter()
@@ -61,7 +141,8 @@ struct VentoyVersionReader: VentoyVersionProbing {
     }
     var makeDirectory: @Sendable () -> URL? = {
         let url = FileManager.default.temporaryDirectory
-            .appendingPathComponent("isotope-vtoyefi-\(UUID().uuidString)", isDirectory: true)
+            .appendingPathComponent("\(VentoyVersionReader.directoryPrefix)\(UUID().uuidString)",
+                                    isDirectory: true)
         do {
             try FileManager.default.createDirectory(at: url, withIntermediateDirectories: false,
                                                     attributes: [.posixPermissions: 0o700])
@@ -72,37 +153,69 @@ struct VentoyVersionReader: VentoyVersionProbing {
     }
     /// `rmdir`, never a recursive delete: if an unmount silently failed, the
     /// folder is still a mount point and must not be emptied.
-    var removeDirectory: @Sendable (URL) -> Void = { url in
-        _ = url.withUnsafeFileSystemRepresentation { path in path.map { rmdir($0) } }
-    }
+    var removeDirectory: @Sendable (URL) -> Void = { url in _ = VentoyMountJanitor.rmdir(url) }
 
-    func readVersion(volumeURL: URL) -> VentoyVersionReading {
-        guard let whole = disks.wholeDisk(forVolumeAt: volumeURL) else {
-            return .unknown("The drive's disk could not be identified")
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult {
+        guard let first = disks.snapshot(forVolumeAt: volumeURL) else {
+            return VentoyProbeResult(.unknown("The drive's disk could not be identified"))
         }
-        guard let partition = disks.partitionTwo(ofWholeDisk: whole) else {
-            return .unknown("The drive has no Ventoy EFI partition")
+        if let refusal = Self.identityRefusal(first, expected: expected) {
+            return VentoyProbeResult(.unknown("Not read: \(refusal)"))
         }
-        var candidate = partition.candidate
-        candidate.dataWholeDisk = whole
+        var candidate = first.efi.candidate
+        candidate.dataWholeDisk = first.wholeDisk.bsdName
+        candidate.dataPartitionBSDName = first.dataPartitionBSDName
         if let refusal = VentoyEFIPartitionRule.refusal(for: candidate) {
-            return .unknown("Not read: \(refusal)")
+            return VentoyProbeResult(.unknown("Not read: \(refusal)"))
         }
-        if let mounted = partition.mountPoint {
-            return parse(at: mounted)
+        if let mounted = first.efi.mountPoint {
+            return VentoyProbeResult(parse(at: mounted))
         }
         guard let directory = makeDirectory() else {
-            return .unknown("No temporary folder to mount the Ventoy EFI partition in")
+            return VentoyProbeResult(.unknown("No temporary folder to mount the Ventoy EFI partition in"))
         }
-        defer { removeDirectory(directory) }
-        let mounted = mounter.mountReadOnly(devicePath: partition.devicePath, at: directory)
+        let isStillSameDevice = {
+            disks.snapshot(forVolumeAt: volumeURL).map { $0.isSameDevice(as: first) } ?? false
+        }
+        let outcome = mounter.mountReadOnly(devicePath: first.efi.devicePath, at: directory,
+                                            isStillSameDevice: isStillSameDevice)
+        let reading: VentoyVersionReading
+        switch outcome {
+        case .mounted:
+            // Right after mounting: is it still the drive the store asked about?
+            reading = isStillSameDevice()
+                ? parse(at: directory)
+                : .unknown("Not read: the drive changed while its Ventoy partition was being mounted")
+        case .identityChanged:
+            reading = .unknown("Not read: the drive changed before its Ventoy partition was mounted")
+        case .failed:
+            reading = .unknown("The Ventoy EFI partition could not be mounted read-only")
+        }
         // Always unmount: after a successful mount, and also after a failed or
         // timed-out one that may still have left something mounted.
-        defer {
-            if mounted || mounter.isMounted(at: directory) { _ = mounter.unmount(directory: directory) }
+        if outcome == .mounted || mounter.isMounted(at: directory) {
+            guard mounter.unmount(directory: directory) else {
+                Self.log.error("Could not unmount the Ventoy EFI partition at \(directory.path, privacy: .public)")
+                return VentoyProbeResult(.unknown("cleanup failed"), leftoverMount: directory)
+            }
         }
-        guard mounted else { return .unknown("The Ventoy EFI partition could not be mounted read-only") }
-        return parse(at: directory)
+        removeDirectory(directory)
+        return VentoyProbeResult(reading)
+    }
+
+    /// Why the snapshot is not the drive the store expects, or nil.
+    static func identityRefusal(_ snapshot: VentoyDiskSnapshot, expected: VentoyExpectedIdentity) -> String? {
+        guard let uuid = snapshot.dataVolumeUUID,
+              uuid.caseInsensitiveCompare(expected.volumeUUID) == .orderedSame else {
+            return "the volume at this path is not the registered drive"
+        }
+        if let wholeDisk = expected.wholeDisk, wholeDisk != snapshot.wholeDisk.bsdName {
+            return "the drive is not on the disk Isotope expected"
+        }
+        if let hardwareID = expected.hardwareID, snapshot.wholeDisk.hardwareID != hardwareID {
+            return "the disk is not the USB device Isotope expected"
+        }
+        return nil
     }
 
     private func parse(at root: URL) -> VentoyVersionReading {
@@ -120,42 +233,103 @@ struct VentoyVersionReader: VentoyVersionProbing {
 
 /// Used under XCTest and wherever reading is not wanted: never touches a disk.
 struct DisabledVentoyVersionReader: VentoyVersionProbing {
-    func readVersion(volumeURL: URL) -> VentoyVersionReading { .unknown("Not read") }
+    var isEnabled: Bool { false }
+    func readVersion(volumeURL: URL, expected: VentoyExpectedIdentity) -> VentoyProbeResult {
+        VentoyProbeResult(.unknown("Not read"))
+    }
+}
+
+// MARK: - Leftover mounts
+
+/// Finds and undoes temporary VTOYEFI mounts: the ones a read could not
+/// unmount, and at launch any `isotope-vtoyefi-*` folder a crash left behind.
+/// A folder is only ever `rmdir`ed, never deleted recursively.
+struct VentoyMountJanitor: Sendable {
+    var mounter: PartitionMounting = LivePartitionMounter()
+    var temporaryDirectory: URL = FileManager.default.temporaryDirectory
+    var removeDirectory: @Sendable (URL) -> Bool = { VentoyMountJanitor.rmdir($0) }
+
+    /// `isotope-vtoyefi-*` folders in the temporary directory.
+    func leftovers() -> [URL] {
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: temporaryDirectory.path)) ?? []
+        return names.filter { $0.hasPrefix(VentoyVersionReader.directoryPrefix) }
+            .map { temporaryDirectory.appendingPathComponent($0, isDirectory: true) }
+    }
+
+    /// Unmounts `directory` if something is mounted there, then removes the
+    /// empty folder. True when the folder is gone.
+    @discardableResult
+    func cleanUp(_ directory: URL) -> Bool {
+        if mounter.isMounted(at: directory), !mounter.unmount(directory: directory) {
+            VentoyVersionReader.log.error("Leftover Ventoy mount at \(directory.path, privacy: .public) could not be unmounted")
+            return false
+        }
+        return removeDirectory(directory)
+    }
+
+    /// The folders that could not be cleaned up.
+    @discardableResult
+    func cleanUpLeftovers() -> [URL] {
+        leftovers().filter { !cleanUp($0) }
+    }
+
+    static func rmdir(_ url: URL) -> Bool {
+        url.withUnsafeFileSystemRepresentation { path in path.map { Darwin.rmdir($0) == 0 } ?? false }
+    }
 }
 
 // MARK: - Live DiskArbitration
 
 struct LiveVentoyDiskInspector: VentoyDiskInspecting {
-    func wholeDisk(forVolumeAt url: URL) -> String? {
+    func snapshot(forVolumeAt url: URL) -> VentoyDiskSnapshot? {
         guard let session = DASessionCreate(kCFAllocatorDefault),
-              let disk = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL),
-              let whole = DADiskCopyWholeDisk(disk),
-              let name = DADiskGetBSDName(whole) else { return nil }
-        return String(cString: name)
-    }
-
-    func partitionTwo(ofWholeDisk wholeDisk: String) -> VentoyEFIPartitionInfo? {
-        guard let session = DASessionCreate(kCFAllocatorDefault) else { return nil }
-        let partitionName = "\(wholeDisk)s2"
+              let data = DADiskCreateFromVolumePath(kCFAllocatorDefault, session, url as CFURL),
+              let dataName = DADiskGetBSDName(data),
+              let dataDescription = DADiskCopyDescription(data) as? [String: Any],
+              let whole = DADiskCopyWholeDisk(data),
+              let wholeName = DADiskGetBSDName(whole),
+              let wholeDescription = DADiskCopyDescription(whole) as? [String: Any]
+        else { return nil }
+        let wholeBSDName = String(cString: wholeName)
+        let partitionName = "\(wholeBSDName)s2"
         guard let partition = DADiskCreateFromBSDName(kCFAllocatorDefault, session, partitionName),
               let description = DADiskCopyDescription(partition) as? [String: Any],
               let parent = DADiskCopyWholeDisk(partition),
-              let parentName = DADiskGetBSDName(parent),
-              let wholeDescription = DADiskCopyDescription(parent) as? [String: Any]
+              let parentName = DADiskGetBSDName(parent)
         else { return nil }
-        let parentBSDName = String(cString: parentName)
         let device = DeviceEnumerator.makeDevice(
-            bsdName: parentBSDName, description: wholeDescription, hardwareID: nil,
+            bsdName: wholeBSDName, description: wholeDescription, hardwareID: nil,
             bootDiskNames: DeviceEnumerator.bootDiskNames(session: session), volumes: [])
         let size = (description[kDADiskDescriptionMediaSizeKey as String] as? NSNumber)?.int64Value ?? 0
         let content = description[kDADiskDescriptionMediaContentKey as String] as? String
         let mountPoint = description[kDADiskDescriptionVolumePathKey as String] as? URL
-        return VentoyEFIPartitionInfo(
-            candidate: VentoyEFIPartitionCandidate(
-                dataWholeDisk: wholeDisk, partitionBSDName: partitionName,
-                partitionWholeDisk: parentBSDName, sizeBytes: size, content: content,
-                disk: device.gateDescription()),
-            mountPoint: mountPoint)
+        let volumeName = description[kDADiskDescriptionVolumeNameKey as String] as? String
+        let identity = VentoyDiskIdentity(
+            bsdName: wholeBSDName,
+            mediaUUID: Self.uuidString(wholeDescription[kDADiskDescriptionMediaUUIDKey as String]),
+            mediaPath: wholeDescription[kDADiskDescriptionMediaPathKey as String] as? String,
+            devicePath: wholeDescription[kDADiskDescriptionDevicePathKey as String] as? String,
+            hardwareID: DeviceEnumerator.hardwareID(bsdName: wholeBSDName))
+        return VentoyDiskSnapshot(
+            dataPartitionBSDName: String(cString: dataName),
+            dataVolumeUUID: Self.uuidString(dataDescription[kDADiskDescriptionVolumeUUIDKey as String]),
+            wholeDisk: identity,
+            efi: VentoyEFIPartitionInfo(
+                candidate: VentoyEFIPartitionCandidate(
+                    dataWholeDisk: wholeBSDName, partitionBSDName: partitionName,
+                    partitionWholeDisk: String(cString: parentName), sizeBytes: size, content: content,
+                    disk: device.gateDescription(),
+                    dataPartitionBSDName: String(cString: dataName), volumeName: volumeName),
+                mountPoint: mountPoint))
+    }
+
+    /// DiskArbitration hands UUIDs back as `CFUUID`.
+    static func uuidString(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        let object = value as CFTypeRef
+        guard CFGetTypeID(object) == CFUUIDGetTypeID() else { return nil }
+        let uuid = unsafeBitCast(object, to: CFUUID.self)
+        return CFUUIDCreateString(kCFAllocatorDefault, uuid) as String?
     }
 }
 
@@ -167,7 +341,8 @@ struct LiveVentoyDiskInspector: VentoyDiskInspecting {
 struct LivePartitionMounter: PartitionMounting {
     static let timeout: TimeInterval = 10
 
-    func mountReadOnly(devicePath: String, at directory: URL) -> Bool {
+    func mountReadOnly(devicePath: String, at directory: URL,
+                       isStillSameDevice: () -> Bool) -> VentoyMountOutcome {
         let attempts: [(String, [String])] = [
             // FSKit's msdos module: works as a plain user where the kext
             // would need loading (DESIGN §21).
@@ -177,18 +352,22 @@ struct LivePartitionMounter: PartitionMounting {
                                     devicePath]),
         ]
         for (tool, arguments) in attempts {
-            _ = ProcessRunner.run(tool, arguments, timeout: Self.timeout)
+            guard isStillSameDevice() else { return .identityChanged }
+            let outcome = ProcessRunner.run(tool, arguments, timeout: Self.timeout)
             switch Self.mountState(at: directory, devicePath: devicePath) {
-            case .readOnly: return true
+            case .readOnly: return .mounted
             case .writable:
                 // Not what was asked for: never read from (or leave) it.
                 _ = unmount(directory: directory)
-                return false
+                return .failed
             case .notMounted, .other:
+                // A tool that would not die even after SIGKILL is not run
+                // again next to it; the caller still checks for a mount.
+                if outcome == .abandoned { return .failed }
                 continue
             }
         }
-        return false
+        return .failed
     }
 
     func isMounted(at directory: URL) -> Bool {
@@ -197,10 +376,18 @@ struct LivePartitionMounter: PartitionMounting {
         return parent.f_fsid.val.0 != own.f_fsid.val.0 || parent.f_fsid.val.1 != own.f_fsid.val.1
     }
 
+    /// `umount`, `umount` again, then `diskutil unmount force` (the mount is
+    /// read-only, so forcing it loses nothing).
     func unmount(directory: URL) -> Bool {
-        _ = ProcessRunner.run("/sbin/umount", [directory.path], timeout: Self.timeout)
-        if !isMounted(at: directory) { return true }
-        _ = ProcessRunner.run("/usr/sbin/diskutil", ["unmount", directory.path], timeout: Self.timeout)
+        let steps: [(String, [String])] = [
+            ("/sbin/umount", [directory.path]),
+            ("/sbin/umount", [directory.path]),
+            ("/usr/sbin/diskutil", ["unmount", "force", directory.path]),
+        ]
+        for (tool, arguments) in steps {
+            _ = ProcessRunner.run(tool, arguments, timeout: Self.timeout)
+            if !isMounted(at: directory) { return true }
+        }
         return !isMounted(at: directory)
     }
 
@@ -225,24 +412,78 @@ struct LivePartitionMounter: PartitionMounting {
     }
 }
 
-/// Runs a tool with a hard timeout. Output is discarded, so a full pipe can
-/// never wedge it; the exit status is all the callers use.
+// MARK: - Bounded processes
+
+/// What `ProcessRunner` needs from a child process; a fake stands in for it in
+/// tests.
+protocol ManagedProcess: AnyObject {
+    var isRunning: Bool { get }
+    var terminationStatus: Int32 { get }
+    /// SIGTERM.
+    func terminate()
+    /// SIGKILL.
+    func kill()
+}
+
+final class LiveProcess: ManagedProcess {
+    let process: Process
+    init(_ process: Process) { self.process = process }
+    var isRunning: Bool { process.isRunning }
+    var terminationStatus: Int32 { process.terminationStatus }
+    func terminate() { process.terminate() }
+    func kill() { _ = Darwin.kill(process.processIdentifier, SIGKILL) }
+}
+
+/// Runs a tool with a hard time limit. Output is discarded, so a full pipe can
+/// never wedge it. Every wait is bounded: past `timeout` the tool gets SIGTERM,
+/// two seconds later SIGKILL, and if it has still not exited two seconds after
+/// that it is abandoned (a process stuck in the kernel can outlive SIGKILL),
+/// and the caller carries on.
 enum ProcessRunner {
-    static func run(_ tool: String, _ arguments: [String], timeout: TimeInterval) -> Int32? {
+    enum Outcome: Equatable {
+        case exited(Int32)
+        case couldNotStart
+        /// Ran past its timeout and was stopped.
+        case timedOut
+        /// Ran past its timeout and did not exit even after SIGKILL.
+        case abandoned
+    }
+
+    static let terminateGrace: TimeInterval = 2
+    static let killGrace: TimeInterval = 2
+
+    static func run(_ tool: String, _ arguments: [String], timeout: TimeInterval) -> Outcome {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: tool)
         process.arguments = arguments
         process.standardInput = FileHandle.nullDevice
         process.standardOutput = FileHandle.nullDevice
         process.standardError = FileHandle.nullDevice
-        do { try process.run() } catch { return nil }
-        let deadline = Date().addingTimeInterval(timeout)
-        while process.isRunning, Date() < deadline { usleep(20_000) }
-        if process.isRunning {
-            process.terminate()
-            process.waitUntilExit()
-            return nil
+        do { try process.run() } catch { return .couldNotStart }
+        return wait(for: LiveProcess(process), timeout: timeout)
+    }
+
+    static func wait(for process: ManagedProcess, timeout: TimeInterval,
+                     terminateGrace: TimeInterval = terminateGrace,
+                     killGrace: TimeInterval = killGrace,
+                     pollInterval: TimeInterval = 0.02) -> Outcome {
+        if waitForExit(process, within: timeout, pollInterval: pollInterval) {
+            return .exited(process.terminationStatus)
         }
-        return process.terminationStatus
+        process.terminate()
+        if waitForExit(process, within: terminateGrace, pollInterval: pollInterval) { return .timedOut }
+        process.kill()
+        if waitForExit(process, within: killGrace, pollInterval: pollInterval) { return .timedOut }
+        return .abandoned
+    }
+
+    private static func waitForExit(_ process: ManagedProcess, within interval: TimeInterval,
+                                    pollInterval: TimeInterval) -> Bool {
+        let deadline = Date().addingTimeInterval(interval)
+        while process.isRunning {
+            guard Date() < deadline else { return false }
+            usleep(useconds_t(max(1_000, pollInterval * 1_000_000)))
+        }
+        return true
     }
 }

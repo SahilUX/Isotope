@@ -179,6 +179,8 @@ actor UpdateEngine {
         defer { cancellations[request.id] = nil }
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
+        // PRD F74: not while the drive's Ventoy partition is mounted for a read.
+        await store.waitForVentoyVersionReads(driveID: request.driveID)
         do {
             let placed = try await executeManual(request, sourceFile: sourceFile, fileName: fileName)
             await store.finishOperation(request: request, result: .success(placed))
@@ -234,6 +236,8 @@ actor UpdateEngine {
         }
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
+        // PRD F74: not while the drive's Ventoy partition is mounted for a read.
+        await store.waitForVentoyVersionReads(driveID: request.driveID)
         if cancellations[request.id]?.isSet == true {
             await store.finishOperation(request: request, result: .failure(.cancelled))
             return

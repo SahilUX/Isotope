@@ -382,6 +382,7 @@ extension AppStore {
     /// mounted volume to unmount at all.
     func ejectFlashedDrive(driveID: UUID) {
         guard let drive = drive(id: driveID), !hasOperationsInFlight(drive),
+              !isReadingVentoyVersion(drive),
               let device = attachedDevice(for: drive) else { return }
         flashEjectOffers.remove(driveID)
         Task.detached { try? DiskUtil.run(["eject", "/dev/\(device.bsdName)"]) }

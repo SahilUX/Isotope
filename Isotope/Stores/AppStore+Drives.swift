@@ -451,6 +451,7 @@ extension AppStore {
         guard let info = volumeInfo(for: drive) else { return "Connect the drive to delete its files" }
         if info.isReadOnly { return "The drive is mounted read-only" }
         if hasOperationsInFlight(drive) { return "Wait for the drive's updates to finish" }
+        if isReadingVentoyVersion(drive) { return Self.ventoyReadFinishing }
         // A pinned copy and a tracker can hold one file between them (an
         // adopted ISO that was then assigned again); removing one row must not
         // pull the file out from under the other.
@@ -503,6 +504,15 @@ extension AppStore {
         // PRD F74: VTOYEFI may be mounted for a moment while its version is read.
         guard !isReadingVentoyVersion(drive) else { return false }
         return drive.isFlashed ? attachedDevice(for: drive) != nil : volumeInfo(for: drive) != nil
+    }
+
+    /// PRD F74: why Delete or Eject is held for a moment.
+    static let ventoyReadFinishing = "Wait a moment: Isotope is finishing reading the drive's Ventoy version"
+
+    /// What the eject button's tooltip says when it is disabled.
+    func ejectBlocker(_ drive: ManagedDrive) -> String {
+        if isReadingVentoyVersion(drive) { return Self.ventoyReadFinishing }
+        return "Wait for the drive's updates to finish"
     }
 
     /// One eject for either kind of drive, for callers that do not care which.

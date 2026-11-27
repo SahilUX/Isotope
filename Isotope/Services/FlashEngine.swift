@@ -181,6 +181,8 @@ actor FlashEngine {
         }
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
+        // PRD F74: not while a Ventoy read has a partition of this device mounted.
+        await store.waitForVentoyVersionReads(driveID: request.driveID, bsdName: request.bsdName)
         do {
             let flashed = try await execute(request)
             await store.finishFlashOperation(request: request, result: .success(flashed))

@@ -81,9 +81,11 @@ public struct VentoyVersion: Hashable, Sendable, Comparable, CustomStringConvert
 
     // MARK: - Secure Boot policy
 
-    /// Ventoy 1.1.14 moved to the Secure Boot shim signed under Microsoft's
-    /// 2023 UEFI CA. Anything older relies on the 2011 CA, which PCs that have
-    /// applied the revocation no longer trust.
+    /// Ventoy 1.1.14 updated its Secure Boot shim "to solve the UEFI CA 2023
+    /// issue" and uses a new CA, whose key is enrolled on first boot (Ventoy's
+    /// release notes). Microsoft is replacing its 2011 UEFI CA with the 2023
+    /// one, so older releases may not boot with Secure Boot on PCs that trust
+    /// only the 2023 CA.
     public static let newSecureBootCA = VentoyVersion("1.1.14")!
 
     /// Whether this release predates the new Secure Boot CA.
@@ -114,6 +116,9 @@ public enum VentoyVersionReading: Equatable, Sendable {
 public struct VentoyEFIPartitionCandidate: Equatable, Sendable {
     /// The whole disk the drive's mounted data volume lives on ("disk4").
     public var dataWholeDisk: String
+    /// The partition the drive's data volume is mounted from ("disk4s1"). Ventoy
+    /// always puts its data partition first; anything else is not read.
+    public var dataPartitionBSDName: String?
     /// The partition being considered ("disk4s2").
     public var partitionBSDName: String
     /// The whole disk DiskArbitration says that partition belongs to.
@@ -123,10 +128,16 @@ public struct VentoyEFIPartitionCandidate: Equatable, Sendable {
     public var content: String?
     /// The whole disk, as the registration gates see it.
     public var disk: FlashDeviceDescription
+    /// The partition's volume (or GPT partition) name when DiskArbitration
+    /// reports one: Ventoy names it "VTOYEFI".
+    public var volumeName: String?
 
     public init(dataWholeDisk: String, partitionBSDName: String, partitionWholeDisk: String,
-                sizeBytes: Int64, content: String?, disk: FlashDeviceDescription) {
+                sizeBytes: Int64, content: String?, disk: FlashDeviceDescription,
+                dataPartitionBSDName: String? = nil, volumeName: String? = nil) {
         self.dataWholeDisk = dataWholeDisk
+        self.dataPartitionBSDName = dataPartitionBSDName
+        self.volumeName = volumeName
         self.partitionBSDName = partitionBSDName
         self.partitionWholeDisk = partitionWholeDisk
         self.sizeBytes = sizeBytes
@@ -145,6 +156,9 @@ public enum VentoyEFIPartitionRule {
 
     /// Partition types that may hold VTOYEFI: MBR type 0xEF (Ventoy's
     /// default) or the GPT EFI System partition (Ventoy's GPT option).
+    /// The name Ventoy gives partition 2.
+    public static let volumeName = "VTOYEFI"
+
     public static func isEFIType(_ content: String?) -> Bool {
         guard let content = content?.trimmingCharacters(in: .whitespaces) else { return false }
         return content.caseInsensitiveCompare("0xEF") == .orderedSame
@@ -153,9 +167,14 @@ public enum VentoyEFIPartitionRule {
     }
 
     /// Why this partition must not be mounted, or nil when it may be. The
-    /// whole disk must pass the same gate as registration (external,
-    /// removable, USB, whole, not the boot disk).
+    /// drive's volume must be partition 1 and the candidate partition 2 of the
+    /// same whole disk, and that disk must pass the same gate as registration
+    /// (external, removable, USB, whole, not the boot disk). A name, when
+    /// DiskArbitration reports one, must be VTOYEFI.
     public static func refusal(for candidate: VentoyEFIPartitionCandidate) -> String? {
+        guard candidate.dataPartitionBSDName == "\(candidate.dataWholeDisk)s1" else {
+            return "the drive's volume is not partition 1 of its disk"
+        }
         guard candidate.partitionWholeDisk == candidate.dataWholeDisk,
               candidate.disk.bsdName == candidate.dataWholeDisk,
               candidate.partitionBSDName == "\(candidate.dataWholeDisk)s2"
@@ -164,6 +183,10 @@ public enum VentoyEFIPartitionRule {
             return "partition 2 is not the size of a Ventoy EFI partition"
         }
         guard isEFIType(candidate.content) else { return "partition 2 is not an EFI partition" }
+        if let name = candidate.volumeName?.trimmingCharacters(in: .whitespaces), !name.isEmpty,
+           name.caseInsensitiveCompare(volumeName) != .orderedSame {
+            return "partition 2 is not named \(volumeName)"
+        }
         guard FlashSafetyGate.isEligibleForRegistration(candidate.disk) else {
             return "the drive is not an external USB disk"
         }
