@@ -220,7 +220,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Status
 
-The shape is settled and the guts are tested. 308 unit tests in `IsotopeCore`, 309 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+The shape is settled and the guts are tested. 308 unit tests in `IsotopeCore`, 324 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

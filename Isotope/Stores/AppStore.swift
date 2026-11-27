@@ -80,8 +80,14 @@ final class AppStore {
     var ventoyReadTickets: [UUID: VentoyReadTicket] = [:]
     /// Ejects under way: no read is started for those disks meanwhile.
     var ventoyEjectReservations: [UUID: VentoyEjectReservation] = [:]
-    /// Temporary VTOYEFI mounts a read could not undo; retried at quit.
+    /// Temporary VTOYEFI containers a read could not prove undone, or that the
+    /// launch janitor could not clean; retried at quit.
     var ventoyLeftoverMounts: Set<URL> = []
+    /// The device each of those containers (from a read) still holds, by
+    /// container: nothing writes to, deletes from or copies to it until the
+    /// drive disconnects, the app quits or the janitor cleans the mount up.
+    /// Eject stays allowed: it is the recovery path (DESIGN §21).
+    var ventoyStuckHolds: [URL: VentoyProbeHold] = [:]
     /// After this long the store cancels a read: one still queued never
     /// starts and releases the device at once; one already running is asked
     /// to stop and keeps the device until it returns (DESIGN §21).
@@ -107,7 +113,10 @@ final class AppStore {
     // the flash pipeline in AppStore+Flash.swift.
     /// External USB whole disks currently attached — the identity source for
     /// flashed drives, which have no mounted volume to key on (PRD F27).
-    var attachedDevices: [FlashDevice] = []
+    var attachedDevices: [FlashDevice] = [] {
+        // PRD F74: a disk that went away takes its unfinished Ventoy read with it.
+        didSet { releaseStuckVentoyHolds() }
+    }
     /// Drives whose flash just finished, so the detail view can offer the eject
     /// (PRD F23). Cleared when the offer is taken or dismissed.
     var flashEjectOffers: Set<UUID> = []

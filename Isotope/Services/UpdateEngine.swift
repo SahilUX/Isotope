@@ -15,6 +15,9 @@ enum UpdateError: LocalizedError, Equatable {
     case extractionFailed(String)
     case copyFailed(String)
     case driveVanished(String)
+    /// PRD F74: refused before anything started, because a Ventoy version
+    /// read has (or may still have) the drive's partition 2 mounted.
+    case ventoyReadHeld(String)
     case cancelled
 
     var errorDescription: String? {
@@ -42,6 +45,8 @@ enum UpdateError: LocalizedError, Equatable {
             return "The copy to the drive failed: \(message)"
         case .driveVanished(let name):
             return "“\(name)” was disconnected during the copy. Nothing usable was left behind — the partial file is cleaned up when the drive is reconnected."
+        case .ventoyReadHeld(let reason):
+            return "Nothing was changed on the drive. \(reason)"
         case .cancelled:
             return "The update was cancelled."
         }
@@ -180,14 +185,10 @@ actor UpdateEngine {
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
         // PRD F74: not while the drive's Ventoy partition is mounted for a read.
-        guard await store.waitForVentoyVersionReads(driveID: request.driveID) else {
-            await store.finishOperation(request: request, result: .failure(.copyFailed(AppStore.ventoyReadStuck)))
-            return
-        }
-        // A cancel during that wait: the request had already left `waiting`,
-        // so nothing else stops it before `place` reclaims space.
-        if cancellations[request.id]?.isSet == true {
-            await store.finishOperation(request: request, result: .failure(.cancelled))
+        // A cancel during that wait ends it at once: the request had already
+        // left `waiting`, so nothing else stops it before `place` reclaims space.
+        if let failure = await ventoyWaitFailure(for: request) {
+            await store.finishOperation(request: request, result: .failure(failure))
             return
         }
         do {
@@ -198,6 +199,22 @@ actor UpdateEngine {
         } catch {
             await store.finishOperation(request: request,
                                         result: .failure(.copyFailed(error.localizedDescription)))
+        }
+    }
+
+    /// Waits while a Ventoy version read holds the drive (PRD F74); nil when the
+    /// operation may start, else why it must not.
+    private func ventoyWaitFailure(for request: UpdateRequest) async -> UpdateError? {
+        let flag = cancellations[request.id]
+        let wait = await store.waitForVentoyVersionReads(driveID: request.driveID,
+                                                         isCancelled: { flag?.isSet == true })
+        switch wait {
+        case .clear:
+            // A cancel that landed after the last poll.
+            return flag?.isSet == true ? .cancelled : nil
+        case .cancelled: return .cancelled
+        case .timedOut: return .ventoyReadHeld(AppStore.ventoyReadStuck)
+        case .unfinished: return .ventoyReadHeld(AppStore.ventoyReadUnfinished)
         }
     }
 
@@ -246,12 +263,8 @@ actor UpdateEngine {
         // Already finished by `cancel` while it was queued.
         guard waiting.removeValue(forKey: request.id) != nil else { return }
         // PRD F74: not while the drive's Ventoy partition is mounted for a read.
-        guard await store.waitForVentoyVersionReads(driveID: request.driveID) else {
-            await store.finishOperation(request: request, result: .failure(.copyFailed(AppStore.ventoyReadStuck)))
-            return
-        }
-        if cancellations[request.id]?.isSet == true {
-            await store.finishOperation(request: request, result: .failure(.cancelled))
+        if let failure = await ventoyWaitFailure(for: request) {
+            await store.finishOperation(request: request, result: .failure(failure))
             return
         }
         do {

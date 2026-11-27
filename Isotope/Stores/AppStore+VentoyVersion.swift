@@ -41,7 +41,24 @@ extension AppStore {
     nonisolated static let ventoyVersionQueue = DispatchQueue(label: "Isotope.VentoyVersion", qos: .utility)
 
     /// Why an update, copy or flash is refused when a read outlives its bound.
-    static let ventoyReadStuck = "Isotope is still reading this drive's Ventoy version, so nothing was changed. Try again in a few minutes, or unplug and reconnect the drive."
+    static let ventoyReadStuck = "Isotope is still reading this drive's Ventoy version. Try again in a few minutes, or unplug and reconnect the drive."
+
+    /// Why an update, copy, flash or delete is refused while a read's mount may
+    /// still be there (it could not be unmounted, or its mount tool would not
+    /// stop). Eject stays allowed.
+    static let ventoyReadUnfinished = "Isotope couldn't finish reading the Ventoy version on this drive. Unplug and reconnect it, or quit and reopen Isotope."
+
+    /// What a wait for the Ventoy reads ended in.
+    enum VentoyReadWait: Equatable, Sendable {
+        /// Nothing holds the device.
+        case clear
+        /// A read outlived `ventoyVersionWaitLimit`.
+        case timedOut
+        /// An earlier read left a mount that may still be there.
+        case unfinished
+        /// The operation was cancelled while it waited.
+        case cancelled
+    }
 
     /// What to show for a drive: nil while connected but not read yet (or not
     /// connected at all).
@@ -55,19 +72,44 @@ extension AppStore {
     /// registered as a Ventoy drive and as a flashed drive at once).
     func isReadingVentoyVersion(_ drive: ManagedDrive) -> Bool {
         let disk = physicalDisk(of: drive)
-        return ventoyProbes.values.contains { hold in
-            if hold.driveID == drive.id { return true }
-            if !drive.volumeUUID.isEmpty, hold.volumeUUID == drive.volumeUUID { return true }
-            if let disk, disk == hold.wholeDisk { return true }
-            // A read whose disk is unknown might be on any flashed stick.
-            return drive.isFlashed && hold.wholeDisk == nil
-        }
+        return ventoyProbes.values.contains { Self.hold($0, covers: drive, disk: disk) }
     }
 
     /// True while a read holds the whole disk `bsdName` (or a disk it could
     /// not name, which might be this one).
     func isReadingVentoyVersion(bsdName: String) -> Bool {
         ventoyProbes.values.contains { $0.wholeDisk == nil || $0.wholeDisk == bsdName }
+    }
+
+    /// True while an earlier read left a mount on this drive's physical device
+    /// that may still be there (see `ventoyReadUnfinished`). Unlike an active
+    /// read this does not block an eject.
+    func isVentoyReadUnfinished(_ drive: ManagedDrive) -> Bool {
+        let disk = physicalDisk(of: drive)
+        return ventoyStuckHolds.values.contains { Self.hold($0, covers: drive, disk: disk) }
+    }
+
+    func isVentoyReadUnfinished(bsdName: String) -> Bool {
+        ventoyStuckHolds.values.contains { $0.wholeDisk == nil || $0.wholeDisk == bsdName }
+    }
+
+    private static func hold(_ hold: VentoyProbeHold, covers drive: ManagedDrive, disk: String?) -> Bool {
+        if hold.driveID == drive.id { return true }
+        if !drive.volumeUUID.isEmpty, hold.volumeUUID == drive.volumeUUID { return true }
+        if let disk, disk == hold.wholeDisk { return true }
+        // A read whose disk is unknown might be on any flashed stick.
+        return drive.isFlashed && hold.wholeDisk == nil
+    }
+
+    /// Drops the holds whose disk is no longer attached or whose drive is no
+    /// longer connected: the mount went with the device.
+    func releaseStuckVentoyHolds() {
+        guard !ventoyStuckHolds.isEmpty else { return }
+        ventoyStuckHolds = ventoyStuckHolds.filter { _, hold in
+            if let disk = hold.wholeDisk, !attachedDevices.contains(where: { $0.bsdName == disk }) { return false }
+            guard let drive = drive(id: hold.driveID), isConnected(drive) else { return false }
+            return true
+        }
     }
 
     /// The whole disk a drive is attached at right now, from the device list.
@@ -77,17 +119,24 @@ extension AppStore {
     }
 
     /// Called by `UpdateEngine` and `FlashEngine` just before an operation
-    /// starts: true once no read holds the drive or `bsdName`; false if one
-    /// still does after `ventoyVersionWaitLimit`, and the caller then refuses
-    /// the operation with `ventoyReadStuck`.
-    func waitForVentoyVersionReads(driveID: UUID, bsdName: String? = nil) async -> Bool {
+    /// starts. `.clear` once no read holds the drive or `bsdName`;
+    /// `.unfinished` at once when an earlier read left a mount that may still
+    /// be there; `.timedOut` if a read still holds it after
+    /// `ventoyVersionWaitLimit`; `.cancelled` as soon as `isCancelled` says so,
+    /// checked on every poll. The caller refuses the operation in the last
+    /// three cases, with nothing changed.
+    func waitForVentoyVersionReads(driveID: UUID, bsdName: String? = nil,
+                                   isCancelled: @Sendable () -> Bool = { false }) async -> VentoyReadWait {
         let deadline = Date().addingTimeInterval(ventoyVersionWaitLimit)
         while true {
+            if isCancelled() { return .cancelled }
             let drive = drive(id: driveID)
+            if drive.map(isVentoyReadUnfinished) == true
+                || bsdName.map({ isVentoyReadUnfinished(bsdName: $0) }) == true { return .unfinished }
             let held = drive.map(isReadingVentoyVersion) == true
                 || bsdName.map { isReadingVentoyVersion(bsdName: $0) } == true
-            guard held else { return true }
-            guard Date() < deadline else { return false }
+            guard held else { return .clear }
+            guard Date() < deadline else { return .timedOut }
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
     }
@@ -162,9 +211,17 @@ extension AppStore {
     /// if it belongs to the current connect (an unplug, or an unplug and
     /// replug, during the read makes it stale, and so does the cap).
     func finishVentoyVersionRead(_ result: VentoyProbeResult, driveID: UUID, token: UUID) {
+        let hold = ventoyProbes[token]
         ventoyProbes[token] = nil
         ventoyReadTickets[token] = nil
-        if let leftover = result.leftoverMount { ventoyLeftoverMounts.insert(leftover) }
+        if let leftover = result.leftoverMount {
+            // The mount may still be there (it could not be unmounted, or its
+            // tool was abandoned and may yet complete): keep the device held
+            // until the drive disconnects, the app quits or it is cleaned up.
+            ventoyLeftoverMounts.insert(leftover)
+            if let hold { ventoyStuckHolds[leftover] = hold }
+            releaseStuckVentoyHolds()
+        }
         guard ventoyVersionReads[driveID] == token else { return }
         ventoyVersionReads[driveID] = nil
         guard let drive = drive(id: driveID), isConnected(drive) else { return }
@@ -203,6 +260,7 @@ extension AppStore {
                 ventoyReadTickets[token] = nil
             }
         }
+        releaseStuckVentoyHolds()
     }
 
     /// Nothing is mounted next to a drive that is being written or ejected:
@@ -244,13 +302,45 @@ extension AppStore {
     /// At launch: undo any temporary VTOYEFI mount an earlier run left behind
     /// (a crash, a force quit). Runs on the read queue, ahead of any read.
     func cleanUpLeftoverVentoyMounts() {
-        guard let janitor = ventoyMountJanitor else { return }
+        guard var janitor = ventoyMountJanitor else { return }
+        janitor.diskGate = ventoyCleanupGate()
         Self.ventoyVersionQueue.async { [weak self] in
             let failed = janitor.cleanUpLeftovers()
             Task { @MainActor [weak self] in
                 self?.ventoyLeftoverMounts.formUnion(failed)
             }
         }
+    }
+
+    /// The janitor's disk gate: before it unmounts a leftover it reserves that
+    /// whole disk, as an eject does, and skips the mount while an operation,
+    /// an eject or a read is on the disk. Called from the janitor's thread;
+    /// nothing on the main actor waits on that thread, so the hop cannot
+    /// deadlock.
+    nonisolated func ventoyCleanupGate() -> VentoyMountJanitor.DiskGate {
+        { [weak self] disk in
+            let reservation: UUID? = DispatchQueue.main.sync {
+                MainActor.assumeIsolated { self?.reserveDiskForVentoyCleanup(disk) }
+            }
+            guard let reservation else { return nil }
+            return {
+                Task { @MainActor [weak self] in self?.releaseEjectReservation(reservation) }
+            }
+        }
+    }
+
+    /// Reserves `disk` for the janitor, or nil when anything is on it: an
+    /// update, copy or flash in flight (a drive whose disk is unknown might be
+    /// this one), an eject, or a Ventoy read.
+    func reserveDiskForVentoyCleanup(_ disk: String) -> UUID? {
+        guard !ventoyEjectReservations.values.contains(where: { $0.wholeDisk == disk }),
+              !isReadingVentoyVersion(bsdName: disk) else { return nil }
+        for id in drivesWithOperationsInFlight {
+            guard let drive = drive(id: id) else { continue }
+            guard let onDisk = physicalDisk(of: drive), onDisk != disk else { return nil }
+        }
+        let volumes = attachedDevices.first { $0.bsdName == disk }?.volumeUUIDs ?? []
+        return reserveForEject(wholeDisk: disk, volumeUUIDs: Set(volumes))
     }
 
     /// At quit: cancel every read (a queued one then never starts, a running
@@ -266,13 +356,17 @@ extension AppStore {
         while !ventoyProbes.isEmpty, Date() < deadline {
             try? await Task.sleep(nanoseconds: 20_000_000)
         }
-        guard let janitor = ventoyMountJanitor, !ventoyLeftoverMounts.isEmpty else { return }
+        guard var janitor = ventoyMountJanitor, !ventoyLeftoverMounts.isEmpty else { return }
+        janitor.diskGate = ventoyCleanupGate()
+        let cleaner = janitor
         let leftovers = Array(ventoyLeftoverMounts)
         let remaining = max(0, deadline.timeIntervalSinceNow)
-        let failed = await Self.runBounded(timeout: remaining) {
-            leftovers.filter { !janitor.cleanUp($0) }
-        }
-        ventoyLeftoverMounts = Set(failed ?? leftovers)
+        let failed = Set(await Self.runBounded(timeout: remaining) {
+            leftovers.filter { !cleaner.cleanUp($0) }
+        } ?? leftovers)
+        ventoyLeftoverMounts = failed
+        // A mount the janitor undid no longer holds its device.
+        ventoyStuckHolds = ventoyStuckHolds.filter { failed.contains($0.key) }
     }
 
     /// Runs blocking `work` on a global queue and returns its result, or nil

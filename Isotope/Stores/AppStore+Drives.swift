@@ -452,6 +452,9 @@ extension AppStore {
         if info.isReadOnly { return "The drive is mounted read-only" }
         if hasOperationsInFlight(drive) { return "Wait for the drive's updates to finish" }
         if isReadingVentoyVersion(drive) { return Self.ventoyReadFinishing }
+        // PRD F74: a mount from an earlier read may still be there. Eject is
+        // still allowed; Delete is not.
+        if isVentoyReadUnfinished(drive) { return Self.ventoyReadUnfinished }
         // A pinned copy and a tracker can hold one file between them (an
         // adopted ISO that was then assigned again); removing one row must not
         // pull the file out from under the other.

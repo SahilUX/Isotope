@@ -177,6 +177,9 @@ final class UpdateEngineTests: XCTestCase {
                                            fileName: "ubuntu-24.04.4-desktop-amd64.iso")
         try? await Task.sleep(nanoseconds: 100_000_000)   // now waiting on the read
         await fixture.engine.cancel(operationID: request.id)
+        // Cancel is immediate: the operation ends while the read still holds the drive.
+        await waitUntil { fixture.store.operations.first?.phase == .cancelled }
+        XCTAssertFalse(fixture.store.ventoyProbes.isEmpty)
         fixture.store.finishVentoyVersionRead(VentoyProbeResult(.unknown("x")), driveID: UUID(), token: token)
         await fixture.engine.drain()
 
