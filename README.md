@@ -92,6 +92,8 @@ ISOs already sitting on the drive are matched against the catalog and offered un
 
 To get rid of an ISO, remove its assignment and choose **Remove and Delete ISO**, or **Stop Tracking, Keep File** to leave it on the stick. Untracked and unrecognised files can be deleted from their right-click menu. Deletes are permanent rather than to the Trash, because on a USB stick the Trash keeps the space in use. The eject button sits on the drive's sidebar row, as in Finder.
 
+The drive's header shows which Ventoy release is installed on the stick, read from its small VTOYEFI partition, which Isotope mounts read-only for a moment and unmounts again, as your user and without an administrator password. Ventoy older than 1.1.14 gets a notice: Ventoy 1.1.14 updated its Secure Boot shim for the UEFI CA 2023 change, and older releases may not boot with Secure Boot on newer PCs. Update Ventoy with Ventoy2Disk and enrol Ventoy's new key the first time you boot it; Isotope does not update Ventoy itself. While a read is queued or the partition is mounted, nothing writes to, deletes from or ejects that stick. A read still waiting after a minute is dropped; one already running keeps the stick until it has unmounted, which its time limits bound at about two minutes, and an update or flash still waiting after about three minutes is refused rather than started. If Isotope could not clean up a Ventoy mount, Update, Copy, Flash and Delete stay refused for that stick until it is unplugged or Isotope is reopened, while Eject stays available. If the partition can't be read, the header says "Ventoy version unknown" and nothing else changes.
+
 ### Flashed drives
 
 Register a physical USB device (identified by USB vendor/product/serial, since flashing destroys the volume identity), assign one image, and Isotope re-images the whole device when a new release ships.
@@ -218,7 +220,7 @@ No telemetry. The app talks only to the ISO sources in the catalog, their checks
 
 ## Status
 
-The shape is settled and the guts are tested. 292 unit tests in `IsotopeCore`, 253 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
+The shape is settled and the guts are tested. 308 unit tests in `IsotopeCore`, 335 in the app layer, all offline. What it has not been through is anyone else's hands or anyone else's hardware.
 
 What that means in practice:
 

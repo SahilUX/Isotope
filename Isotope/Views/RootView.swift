@@ -36,7 +36,7 @@ struct RootView: View {
                                     .disabled(!store.canEject(drive))
                                     .help(store.canEject(drive)
                                           ? "Eject “\(drive.displayName)”"
-                                          : "Wait for the drive's updates to finish")
+                                          : store.ejectBlocker(drive))
                                 }
                             }
                         } icon: {

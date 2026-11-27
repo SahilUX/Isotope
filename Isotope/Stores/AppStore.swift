@@ -58,13 +58,73 @@ final class AppStore {
 
     /// Drives with a download/copy in flight. Phase 4's UpdateEngine owns this
     /// set; Phase 3 only reads it, to keep Eject and Unregister safe (PRD F23).
-    var drivesWithOperationsInFlight: Set<UUID> = []
+    var drivesWithOperationsInFlight: Set<UUID> = [] {
+        // PRD F74: a drive that was busy when it connected has its Ventoy
+        // version read once the pipeline lets go of it.
+        didSet {
+            guard drivesWithOperationsInFlight != oldValue else { return }
+            for drive in drives where !drive.isFlashed { refreshVentoyVersion(driveID: drive.id) }
+        }
+    }
+
+    /// PRD F74: the Ventoy release read from each connected Ventoy drive, in
+    /// memory only (never persisted). Written by AppStore+VentoyVersion.swift.
+    var ventoyVersions: [UUID: VentoyVersionReading] = [:]
+    /// Reads in progress, each with the token of the connect it belongs to.
+    var ventoyVersionReads: [UUID: UUID] = [:]
+    /// Every read that is queued or running, by token, with the device it
+    /// holds. A running read outlives an unplug or unregister, so no read
+    /// that may have a mount is lost track of.
+    var ventoyProbes: [UUID: VentoyProbeHold] = [:]
+    /// Each read's cancellation ticket, by the same token.
+    var ventoyReadTickets: [UUID: VentoyReadTicket] = [:]
+    /// Ejects under way: no read is started for those disks meanwhile.
+    var ventoyEjectReservations: [UUID: VentoyEjectReservation] = [:]
+    /// Temporary VTOYEFI containers a read could not prove undone, or that the
+    /// launch janitor could not clean; retried at quit.
+    var ventoyLeftoverMounts: Set<URL> = []
+    /// The physical device each of those containers (from a read or a failed
+    /// cleanup) still holds, by container: nothing writes to, deletes from or
+    /// copies to it until the mount is cleaned up or the whole disk has left
+    /// the device list, whatever happens to any registration. Eject stays
+    /// allowed: it is the recovery path (DESIGN §21).
+    var ventoyStuckHolds: [URL: VentoyStuckHold] = [:]
+    /// Asks the device watcher for a fresh scan; `DriveMonitor` sets it. A
+    /// held disk missing from one scan is confirmed gone by a second one.
+    var rescanDevices: (@MainActor () -> Void)?
+    /// How long after a held disk first goes missing the store asks for that
+    /// second scan.
+    var ventoyRemovalRecheckDelay: TimeInterval = 1
+    var ventoyRecheckPending = false
+    /// After this long the store cancels a read: one still queued never
+    /// starts and releases the device at once; one already running is asked
+    /// to stop and keeps the device until it returns (DESIGN §21).
+    var ventoyVersionReadCap: TimeInterval = 60
+    /// How long an update, copy or flash waits for a read before it is
+    /// refused: the cap (a queued read) plus the longest a running read can
+    /// take, plus a margin. About 3 minutes; a read still holding the device
+    /// after that is treated as stuck.
+    var ventoyVersionWaitLimit: TimeInterval = 60 + VentoyVersionReader.activeReadBound + 5
+    /// `diskutil eject` for a flashed drive's whole disk; injectable so tests
+    /// never eject anything.
+    var flashedDiskEjector: @Sendable (String) async -> Void = { bsdName in
+        await Task.detached { _ = try? DiskUtil.run(["eject", "/dev/\(bsdName)"]) }.value
+    }
+    /// Mounts VTOYEFI read-only; never under XCTest, where tests inject a fake.
+    var ventoyVersionReader: VentoyVersionProbing =
+        LaunchEnvironment.isRunningUnderTest ? DisabledVentoyVersionReader() : VentoyVersionReader()
+    /// Undoes leftover temporary mounts; nil under XCTest unless a test sets one.
+    var ventoyMountJanitor: VentoyMountJanitor? =
+        LaunchEnvironment.isRunningUnderTest ? nil : VentoyMountJanitor()
 
     // Flashed drives (PRD §8). Written by `DriveMonitor`'s device watcher and
     // the flash pipeline in AppStore+Flash.swift.
     /// External USB whole disks currently attached — the identity source for
     /// flashed drives, which have no mounted volume to key on (PRD F27).
-    var attachedDevices: [FlashDevice] = []
+    var attachedDevices: [FlashDevice] = [] {
+        // PRD F74: a disk that went away takes its unfinished Ventoy mount with it.
+        didSet { noteDeviceScanForVentoyHolds() }
+    }
     /// Drives whose flash just finished, so the detail view can offer the eject
     /// (PRD F23). Cleared when the offer is taken or dismissed.
     var flashEjectOffers: Set<UUID> = []
@@ -153,9 +213,14 @@ final class AppStore {
     /// relaunch can carry on. Called from `applicationShouldTerminate`.
     func prepareForQuit() async {
         stopPeriodicRefresh()
-        guard let downloads = downloadManager else { return }
-        await downloads.suspendForQuit()
+        // PRD F74: a VTOYEFI read still running gets a moment to unmount.
+        async let ventoy: Void = drainVentoyVersionReads(timeout: Self.ventoyQuitTimeout)
+        if let downloads = downloadManager { await downloads.suspendForQuit() }
+        await ventoy
     }
+
+    /// Inside `AppDelegate.quitTimeout`, which ends the quit regardless.
+    static let ventoyQuitTimeout: TimeInterval = 2
 
     func stopPeriodicRefresh() {
         periodicRefresh?.cancel()

@@ -184,6 +184,7 @@ extension AppStore {
         isoSizes[id] = nil
         lastScanAt[id] = nil
         isScanning.remove(id)
+        forgetVentoyVersion(driveID: id)
         if selection == .drive(id) { selection = .drives }
     }
 
@@ -208,6 +209,7 @@ extension AppStore {
         connectedVolumes[volumeUUID] = nil
         for drive in drives where drive.volumeUUID == volumeUUID {
             isScanning.remove(drive.id)
+            forgetVentoyVersion(driveID: drive.id)
         }
     }
 
@@ -259,6 +261,8 @@ extension AppStore {
         // build, so anything newly found here still has to be opened to say
         // which 25H2 it is. Runs on its own, after the scan has settled.
         refreshWindowsBuilds(driveID: driveID)
+        // PRD F74: once per connect, and only while nothing writes to the drive.
+        refreshVentoyVersion(driveID: driveID)
         return result
     }
 
@@ -447,6 +451,10 @@ extension AppStore {
         guard let info = volumeInfo(for: drive) else { return "Connect the drive to delete its files" }
         if info.isReadOnly { return "The drive is mounted read-only" }
         if hasOperationsInFlight(drive) { return "Wait for the drive's updates to finish" }
+        if isReadingVentoyVersion(drive) { return Self.ventoyReadFinishing }
+        // PRD F74: a mount from an earlier read may still be there. Eject is
+        // still allowed; Delete is not.
+        if isVentoyReadUnfinished(drive) { return Self.ventoyReadUnfinished }
         // A pinned copy and a tracker can hold one file between them (an
         // adopted ISO that was then assigned again); removing one row must not
         // pull the file out from under the other.
@@ -496,7 +504,18 @@ extension AppStore {
     /// eject, and nothing is being written to it (PRD F23).
     func canEject(_ drive: ManagedDrive) -> Bool {
         guard !hasOperationsInFlight(drive) else { return false }
+        // PRD F74: VTOYEFI may be mounted for a moment while its version is read.
+        guard !isReadingVentoyVersion(drive) else { return false }
         return drive.isFlashed ? attachedDevice(for: drive) != nil : volumeInfo(for: drive) != nil
+    }
+
+    /// PRD F74: why Delete or Eject is held for a moment.
+    static let ventoyReadFinishing = "Wait a moment: Isotope is finishing reading the drive's Ventoy version"
+
+    /// What the eject button's tooltip says when it is disabled.
+    func ejectBlocker(_ drive: ManagedDrive) -> String {
+        if isReadingVentoyVersion(drive) { return Self.ventoyReadFinishing }
+        return "Wait for the drive's updates to finish"
     }
 
     /// One eject for either kind of drive, for callers that do not care which.
@@ -507,8 +526,11 @@ extension AppStore {
 
     func eject(driveID: UUID) throws {
         guard let drive = drive(id: driveID) else { return }
-        guard !hasOperationsInFlight(drive) else { return }
+        guard !hasOperationsInFlight(drive), !isReadingVentoyVersion(drive) else { return }
         guard let info = volumeInfo(for: drive) else { return }
+        // PRD F74: no Ventoy version read starts for this disk while it ejects.
+        let reservation = reserveForEject(wholeDisk: physicalDisk(of: drive), volumeUUIDs: [drive.volumeUUID])
+        defer { releaseEjectReservation(reservation) }
         try DriveAccess.eject(volumeURL: info.url)
         markDisconnected(volumeUUID: drive.volumeUUID)
     }

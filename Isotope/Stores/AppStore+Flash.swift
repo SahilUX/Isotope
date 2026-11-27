@@ -382,9 +382,18 @@ extension AppStore {
     /// mounted volume to unmount at all.
     func ejectFlashedDrive(driveID: UUID) {
         guard let drive = drive(id: driveID), !hasOperationsInFlight(drive),
+              !isReadingVentoyVersion(drive),
               let device = attachedDevice(for: drive) else { return }
         flashEjectOffers.remove(driveID)
-        Task.detached { try? DiskUtil.run(["eject", "/dev/\(device.bsdName)"]) }
+        // PRD F74: no Ventoy version read is scheduled or started for this
+        // disk until the eject has completed or failed.
+        let reservation = reserveForEject(wholeDisk: device.bsdName, volumeUUIDs: Set(device.volumeUUIDs))
+        let ejector = flashedDiskEjector
+        let bsdName = device.bsdName
+        Task { [weak self] in
+            await ejector(bsdName)
+            self?.releaseEjectReservation(reservation)
+        }
     }
 
     private func releaseFlashInFlight(driveID: UUID) {

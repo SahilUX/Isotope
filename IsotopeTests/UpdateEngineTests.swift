@@ -157,6 +157,41 @@ final class UpdateEngineTests: XCTestCase {
         XCTAssertEqual(fixture.store.operations.first?.phase, .completed)
     }
 
+    // MARK: - Cancelling while a Ventoy version read holds the drive (PRD F74)
+
+    func testCancelDuringAVentoyReadWaitKeepsTheInstalledISO() async throws {
+        // A full drive: placing the new ISO would delete the installed one first.
+        let installed = InstalledISO(fileName: "ubuntu-24.04.1-desktop-amd64.iso",
+                                     version: .parse("24.04.1"), placedByApp: true)
+        let fixture = try await makeFixture(installed: installed, availableBytes: 200 * 1024,
+                                            isoSize: 256 * 1024, installedSize: 256 * 1024)
+        let token = UUID()
+        fixture.store.ventoyProbes[token] = VentoyProbeHold(driveID: fixture.driveID, volumeUUID: "UUID-A",
+                                                            wholeDisk: nil)
+        let source = try TestFiles.write(root.appendingPathComponent("ubuntu-24.04.4-desktop-amd64.iso"),
+                                         size: 256 * 1024)
+        let request = UpdateRequest(driveID: fixture.driveID, driveName: "VENTOY",
+                                    assignmentID: fixture.assignmentID, entryID: "ubuntu",
+                                    channelID: "lts", title: "Ubuntu Desktop — LTS", release: fixture.release)
+        await fixture.engine.enqueueManual(request, sourceFile: source,
+                                           fileName: "ubuntu-24.04.4-desktop-amd64.iso")
+        try? await Task.sleep(nanoseconds: 100_000_000)   // now waiting on the read
+        await fixture.engine.cancel(operationID: request.id)
+        // Cancel is immediate: the operation ends while the read still holds the drive.
+        await waitUntil { fixture.store.operations.first?.phase == .cancelled }
+        XCTAssertFalse(fixture.store.ventoyProbes.isEmpty)
+        fixture.store.finishVentoyVersionRead(VentoyProbeResult(.unknown("x")), driveID: UUID(), token: token)
+        await fixture.engine.drain()
+
+        let old = volume.appendingPathComponent(installed.fileName)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: old.path), "the installed ISO is untouched")
+        XCTAssertEqual(TestFiles.size(old), 256 * 1024)
+        XCTAssertFalse(FileManager.default.fileExists(
+            atPath: volume.appendingPathComponent("ubuntu-24.04.4-desktop-amd64.iso").path))
+        XCTAssertEqual(fixture.store.operations.first?.phase, .cancelled)
+        XCTAssertTrue(FileManager.default.fileExists(atPath: source.path))
+    }
+
     // MARK: - Replacing a file that shares the new name (PRD F61)
 
     func testAnISOCanReplaceAFileOfTheSameNameOnAFullDrive() async throws {

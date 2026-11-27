@@ -102,7 +102,7 @@ struct FlashedDriveDetailView: View {
                     .background(.quaternary, in: Capsule())
                 Spacer()
                 Button("Eject", systemImage: "eject") { store.ejectFlashedDrive(driveID: drive.id) }
-                    .disabled(device == nil || store.hasOperationsInFlight(drive))
+                    .disabled(device == nil || !store.canEject(drive))
             }
             Text(connectionSummary(drive: drive, device: device))
                 .font(.caption)
