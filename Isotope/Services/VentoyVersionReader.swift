@@ -100,10 +100,18 @@ struct VentoyProbeResult: Equatable, Sendable {
     /// store keeps the device held until its disk is unplugged, the app quits
     /// or the janitor cleans it up; a whole-disk eject unmounts it too.
     var leftoverMount: URL?
+    /// The whole disk ("disk4") the reader identified and verified before it
+    /// went any further, or nil when it failed before that (then it cannot
+    /// have mounted anything). It comes back with every result, because the
+    /// store may have scheduled the read without knowing the disk (a launch
+    /// scan runs before the device list is filled): a mount left behind is
+    /// held by this physical disk, not by the registration (DESIGN §21).
+    var wholeDisk: String?
 
-    init(_ reading: VentoyVersionReading, leftoverMount: URL? = nil) {
+    init(_ reading: VentoyVersionReading, leftoverMount: URL? = nil, wholeDisk: String? = nil) {
         self.reading = reading
         self.leftoverMount = leftoverMount
+        self.wholeDisk = wholeDisk
     }
 }
 
@@ -282,11 +290,12 @@ struct VentoyVersionReader: VentoyVersionProbing {
         if let refusal = Self.identityRefusal(first, expected: expected) {
             return VentoyProbeResult(.unknown("Not read: \(refusal)"))
         }
+        let disk = first.wholeDisk.bsdName
         var candidate = first.efi.candidate
-        candidate.dataWholeDisk = first.wholeDisk.bsdName
+        candidate.dataWholeDisk = disk
         candidate.dataPartitionBSDName = first.dataPartitionBSDName
         if let refusal = VentoyEFIPartitionRule.refusal(for: candidate) {
-            return VentoyProbeResult(.unknown("Not read: \(refusal)"))
+            return VentoyProbeResult(.unknown("Not read: \(refusal)"), wholeDisk: disk)
         }
         if let mounted = first.efi.mountPoint {
             // A partition 2 mounted in one of our own private folders is an
@@ -294,17 +303,19 @@ struct VentoyVersionReader: VentoyVersionProbing {
             // read in place (DESIGN §21).
             if let container = Self.isotopeContainer(containing: mounted) {
                 return VentoyProbeResult(.unknown("The Ventoy EFI partition is still mounted by an earlier read"),
-                                         leftoverMount: container)
+                                         leftoverMount: container, wholeDisk: disk)
             }
-            return VentoyProbeResult(parse(at: mounted))
+            return VentoyProbeResult(parse(at: mounted), wholeDisk: disk)
         }
-        guard !ticket.isCancelled else { return cancelled }
+        guard !ticket.isCancelled else {
+            return VentoyProbeResult(.unknown(VentoyReadTicket.cancelledReason), wholeDisk: disk)
+        }
         guard let container = makeDirectory() else {
-            return VentoyProbeResult(.unknown("No temporary folder to mount the Ventoy EFI partition in"))
+            return VentoyProbeResult(.unknown("No temporary folder to mount the Ventoy EFI partition in"), wholeDisk: disk)
         }
         guard let directory = makeMountPoint(container) else {
             removeDirectory(container)
-            return VentoyProbeResult(.unknown("No temporary folder to mount the Ventoy EFI partition in"))
+            return VentoyProbeResult(.unknown("No temporary folder to mount the Ventoy EFI partition in"), wholeDisk: disk)
         }
         let isStillSameDevice = {
             disks.snapshot(forVolumeAt: volumeURL).map { $0.isSameDevice(as: first) } ?? false
@@ -337,19 +348,19 @@ struct VentoyVersionReader: VentoyVersionProbing {
             if mounter.isMounted(at: directory) { _ = mounter.unmount(directory: directory) }
             Self.log.error("The mount of the Ventoy EFI partition at \(directory.path, privacy: .public) did not finish")
             return VentoyProbeResult(.unknown("The Ventoy EFI partition mount did not finish"),
-                                     leftoverMount: container)
+                                     leftoverMount: container, wholeDisk: disk)
         }
         // Always unmount: after a successful mount, and also after a failed or
         // timed-out one that may still have left something mounted.
         if outcome == .mounted || mounter.isMounted(at: directory) {
             guard mounter.unmount(directory: directory) else {
                 Self.log.error("Could not unmount the Ventoy EFI partition at \(directory.path, privacy: .public)")
-                return VentoyProbeResult(.unknown("cleanup failed"), leftoverMount: container)
+                return VentoyProbeResult(.unknown("cleanup failed"), leftoverMount: container, wholeDisk: disk)
             }
         }
         removeDirectory(directory)
         removeDirectory(container)
-        return VentoyProbeResult(reading)
+        return VentoyProbeResult(reading, wholeDisk: disk)
     }
 
     /// The `isotope-vtoyefi-<UUID>` folder `path` is in or under, or nil.

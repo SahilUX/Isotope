@@ -257,7 +257,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         mounter.config = grub
         let disks = FakeDisks(ventoySnapshot())
         let result = read(disks, mounter)
-        XCTAssertEqual(result, VentoyProbeResult(.known(VentoyVersion("1.1.18")!)))
+        XCTAssertEqual(result, VentoyProbeResult(.known(VentoyVersion("1.1.18")!), wholeDisk: "disk9"))
         XCTAssertEqual(mounter.mounts.map(\.0), ["/dev/disk9s2"])
         let directory = try XCTUnwrap(mounter.mounts.first?.1)
         XCTAssertEqual(directory.lastPathComponent, "m", "the mount point is <container>/m")
@@ -308,6 +308,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         let directory = try XCTUnwrap(mounter.mounts.first?.1)
         let container = directory.deletingLastPathComponent()
         XCTAssertEqual(result.leftoverMount, container, "the janitor works on the container")
+        XCTAssertEqual(result.wholeDisk, "disk9", "the reader says which disk the mount is on")
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path),
                       "a folder that may still be a mount point is never removed")
         XCTAssertTrue(FileManager.default.fileExists(atPath: container.path))
@@ -324,6 +325,7 @@ final class VentoyVersionReaderTests: XCTestCase {
         let directory = try XCTUnwrap(mounter.mounts.first?.1)
         let container = directory.deletingLastPathComponent()
         XCTAssertEqual(result.leftoverMount, container)
+        XCTAssertEqual(result.wholeDisk, "disk9")
         XCTAssertTrue(FileManager.default.fileExists(atPath: directory.path))
         XCTAssertTrue(FileManager.default.fileExists(atPath: container.path))
         XCTAssertTrue(mounter.unmounts.isEmpty, "nothing was mounted yet, so nothing to unmount")
@@ -1555,6 +1557,86 @@ final class VentoyVersionStoreTests: XCTestCase {
         XCTAssertTrue(attempt.io.written.isEmpty)
         let message = try XCTUnwrap(store.operations.first?.errorMessage)
         XCTAssertTrue(message.contains(AppStore.ventoyReadUnfinished), message)
+    }
+
+    /// A read scheduled at launch, before `attachedDevices` is filled, has no
+    /// whole disk in its probe hold. The reader identifies the disk itself, and
+    /// the hold must follow that disk, not the registration.
+    func testLaunchOrderReadLeavingAMountHoldsThePhysicalDiskAcrossUnregister() async throws {
+        let mounter = FakeMounter()
+        mounter.abandons = true
+        let store = await makeStore(probe: probe([:]))
+        store.ventoyVersionReader = realReader(mounter: mounter)
+        XCTAssertTrue(store.attachedDevices.isEmpty, "launch order: the device list is not filled yet")
+        let drive = try startRead(store)
+        XCTAssertNil(store.ventoyProbes.values.first?.wholeDisk, "the probe was scheduled without a disk")
+        await waitUntil { store.ventoyProbes.isEmpty && !store.ventoyStuckHolds.isEmpty }
+        let container = try XCTUnwrap(store.ventoyStuckHolds.keys.first)
+        XCTAssertEqual(store.ventoyStuckHolds[container]?.wholeDisk, "disk4", "the reader's verified disk")
+        XCTAssertEqual(store.ventoyStuckHolds[container]?.missedScans, 0,
+                       "a disk not listed yet at hold time does not start the count at 1")
+
+        // The first scan fills the device list; the registration goes away.
+        store.attachedDevices = [matchingDevice()]
+        store.unregisterDrive(id: drive.id)
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1, "unregister does not drop a hold on a known disk")
+        XCTAssertTrue(store.isVentoyReadUnfinished(bsdName: "disk4"))
+
+        // The same stick, registered as flashed, is refused.
+        var flashed = ManagedDrive(volumeUUID: "", displayName: "SanDisk Cruzer Blade", bookmark: Data(),
+                                   assignments: [Assignment(entryID: "arch", channelID: "default")],
+                                   capacityBytes: 32 << 30, kind: .flashed,
+                                   hardwareID: HardwareID(vendorID: 1, productID: 2, serialNumber: "S1"),
+                                   lastBSDName: "disk4")
+        flashed.kind = .flashed
+        store.addDrive(flashed)
+        XCTAssertTrue(store.isVentoyReadUnfinished(flashed))
+        let attempt = try flashAttempt(store, flashed: flashed)
+        let started = Date()
+        await attempt.engine.enqueue(attempt.request)
+        await attempt.engine.drain()
+        XCTAssertLessThan(Date().timeIntervalSince(started), 2, "refused at once, not after the wait limit")
+        XCTAssertEqual(attempt.io.describeCount, 0)
+        XCTAssertTrue(attempt.io.written.isEmpty)
+        let message = try XCTUnwrap(store.operations.first?.errorMessage)
+        XCTAssertTrue(message.contains(AppStore.ventoyReadUnfinished), message)
+
+        // Two scans without the disk release it.
+        store.attachedDevices = []
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1, "one scan is not a removal")
+        store.attachedDevices = []
+        XCTAssertTrue(store.ventoyStuckHolds.isEmpty)
+        let wait = await store.waitForVentoyVersionReads(driveID: flashed.id, bsdName: "disk4")
+        XCTAssertEqual(wait, .clear)
+    }
+
+    func testLaunchOrderFailedUnmountAlsoHoldsThePhysicalDisk() async throws {
+        let mounter = FakeMounter()
+        mounter.config = "set VENTOY_VERSION=\"1.1.18\"\n"
+        mounter.unmountFailures = -1
+        let store = await makeStore(probe: probe([:]))
+        store.ventoyVersionReader = realReader(mounter: mounter)
+        let drive = try startRead(store)
+        await waitUntil { store.ventoyProbes.isEmpty && !store.ventoyStuckHolds.isEmpty }
+        XCTAssertEqual(store.ventoyStuckHolds.values.first?.wholeDisk, "disk4")
+        store.unregisterDrive(id: drive.id)
+        XCTAssertEqual(store.ventoyStuckHolds.count, 1)
+        XCTAssertTrue(store.isVentoyReadUnfinished(bsdName: "disk4"))
+        XCTAssertFalse(store.isVentoyReadUnfinished(bsdName: "disk7"))
+    }
+
+    func testAReadThatNeverIdentifiedADiskKeepsTheRegistrationKeyedHold() async throws {
+        let store = await makeStore(probe: probe([:]))
+        let drive = try store.registerDrive(at: urlA)
+        let leftover = root.appendingPathComponent("isotope-vtoyefi-X", isDirectory: true)
+        let token = UUID()
+        store.ventoyProbes[token] = VentoyProbeHold(driveID: drive.id, volumeUUID: "UUID-A", wholeDisk: nil)
+        store.finishVentoyVersionRead(VentoyProbeResult(.unknown("x"), leftoverMount: leftover),
+                                      driveID: drive.id, token: token)
+        XCTAssertNil(store.ventoyStuckHolds[leftover]?.wholeDisk)
+        XCTAssertEqual(store.ventoyStuckHolds[leftover]?.driveID, drive.id)
+        store.unregisterDrive(id: drive.id)
+        XCTAssertTrue(store.ventoyStuckHolds.isEmpty, "no disk was identified, so the registration decides")
     }
 
     func testATransientEmptyDeviceScanKeepsTheHold() async throws {

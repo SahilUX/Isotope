@@ -206,13 +206,15 @@ extension AppStore {
     /// Records a mount that may still be there and the device it holds.
     func holdVentoyMount(_ container: URL, _ hold: VentoyStuckHold) {
         ventoyLeftoverMounts.insert(container)
-        var hold = hold
-        if let disk = hold.wholeDisk, !attachedDevices.contains(where: { $0.bsdName == disk }) {
-            hold.missedScans = 1
-        }
+        // The count starts at 0 even when the disk is not in the device list
+        // yet (a read scheduled at launch can finish before the first scan
+        // fills it): only scans taken after the hold count as missing.
         ventoyStuckHolds[container] = ventoyStuckHolds[container] ?? hold
         releaseStuckVentoyHolds()
-        if (ventoyStuckHolds[container]?.missedScans ?? 0) > 0 { scheduleDeviceRecheck() }
+        if let disk = ventoyStuckHolds[container]?.wholeDisk,
+           !attachedDevices.contains(where: { $0.bsdName == disk }) {
+            scheduleDeviceRecheck()
+        }
     }
 
     /// The whole disk a drive is attached at right now, from the device list.
@@ -321,8 +323,19 @@ extension AppStore {
             // The mount may still be there (it could not be unmounted, or its
             // tool was abandoned and may yet complete): keep the device held
             // until its disk is unplugged, the app quits or it is cleaned up.
-            if let hold {
-                holdVentoyMount(leftover, VentoyStuckHold(hold))
+            //
+            // The disk comes from the reader, which identified and verified it
+            // itself: the read may have been scheduled before the device list
+            // knew the drive (`hold.wholeDisk == nil`), and a hold keyed to the
+            // registration would then vanish with an unregister while the mount
+            // is still on the disk. Only a read that never identified a disk
+            // keeps the registration-keyed hold.
+            let disk = result.wholeDisk ?? hold?.wholeDisk
+            if var stuck = hold.map(VentoyStuckHold.init) {
+                stuck.wholeDisk = disk
+                holdVentoyMount(leftover, stuck)
+            } else if let disk {
+                holdVentoyMount(leftover, VentoyStuckHold(wholeDisk: disk, driveID: nil, volumeUUID: ""))
             } else {
                 ventoyLeftoverMounts.insert(leftover)
             }
